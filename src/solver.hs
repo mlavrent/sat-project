@@ -29,12 +29,14 @@ showBool :: Bool -> String
 showBool b = if b then "true" else "false"
 
 
-unitClauseElim :: Result -> SATInstance -> (SATInstance, Result)
-unitClauseElim assn satInst = (satInst, assn)
+unitClauseElim :: Result -> SATInstance -> (Result, SATInstance)
+unitClauseElim Unsat satInst = (Unsat, satInst)
+unitClauseElim assn satInst = (assn, satInst)
 
 
-sameSignElim :: Result -> SATInstance -> (SATInstance, Result)
-sameSignElim assn satInst = (satInst, assn)
+sameSignElim :: Result -> SATInstance -> (Result, SATInstance)
+sameSignElim Unsat satInst = (Unsat, satInst)
+sameSignElim assn satInst = (assn, satInst)
 
 
 makeLiteral :: String -> Literal
@@ -67,8 +69,13 @@ parseCNF input =
     in assert (pLine!!1 == "cnf") . assert (all (\ clause -> last clause == "0") . tail $ contentLines) $ cnf
 
 
+solveWithAssn :: Result -> SATInstance -> Result
+solveWithAssn Unsat _ = Unsat
+solveWithAssn (Assignment assn) cnf = Unsat -- TODO edit this here
+
+
 solve :: SATInstance -> Result
-solve satInst = Unsat
+solve = solveWithAssn (Assignment [])
 
 
 formatOutput :: String -> NominalDiffTime -> Result -> String
