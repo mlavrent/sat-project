@@ -4,21 +4,29 @@ import Data.Time
 import Text.Printf
 import Control.Exception
 import System.Environment
+import Control.DeepSeq
+import Control.Concurrent
 
 
 type Variable = Int
 data Literal = Pos Variable | Neg Variable deriving (Ord, Eq, Show)
 type Clause = Set Literal
 type SATInstance = Set Clause
-data Result = Assignment [(Variable, Bool)] | Unsat
+data Result = Assignment [(Variable, Bool)] | Unsat --deriving (NFData)
 
-
-showBool :: Bool -> String
-showBool b = if b then "true" else "false"
 
 instance Show Result where
     show Unsat = "UNSAT"
     show (Assignment assn) = foldl (\ str (var, bool) -> str ++ show var ++ " " ++ showBool bool) "" assn
+
+
+instance NFData Result where
+    rnf Unsat = ()
+    rnf (Assignment lst) = lst `deepseq` ()
+
+
+showBool :: Bool -> String
+showBool b = if b then "true" else "false"
 
 
 unitClauseElim :: Result -> SATInstance -> (SATInstance, Result)
@@ -63,16 +71,17 @@ solve :: SATInstance -> Result
 solve satInst = Unsat
 
 
-formatOutput :: String -> Result -> String
-formatOutput fileName res =
-    printf "Instance: %s Time: -- Result: %s" fileName (show res)
+formatOutput :: String -> NominalDiffTime -> Result -> String
+formatOutput file runTime res =
+    printf "Instance %s Time: %s Result: %s" file (show runTime) (show res)
 
 
 main :: IO ()
 main = do
     args <- getArgs
     let file = head args
-    print file
     contents <- readFile file
+    start <- getCurrentTime
     let result = solve . parseCNF $ contents
-    print (formatOutput file result)
+    end <- result `deepseq` getCurrentTime
+    print (formatOutput file (diffUTCTime end start) result)
