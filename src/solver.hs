@@ -18,7 +18,7 @@ showBool b = if b then "true" else "false"
 
 instance Show Result where
     show Unsat = "UNSAT"
-    show (Assignment assn) = foldl (\ str (var, bool) -> str ++ (show var) ++ " " ++ (showBool bool)) "" assn
+    show (Assignment assn) = foldl (\ str (var, bool) -> str ++ show var ++ " " ++ showBool bool) "" assn
 
 
 unitClauseElim :: Result -> SATInstance -> (SATInstance, Result)
@@ -41,7 +41,7 @@ makeLiteral litStr =
 
 
 makeClause :: [String] -> Clause
-makeClause = Set.fromList . (map makeLiteral) . init
+makeClause = Set.fromList . map makeLiteral . init
 
 
 parseCNF :: String -> SATInstance
@@ -55,8 +55,8 @@ parseCNF input =
                     then error "Error: DIMACS file does not have problem line" 
                 else head contentLines
         -- Create a set of clauses from the content lines
-        cnf = Set.fromList . (map makeClause) . tail $ contentLines
-    in (assert (pLine!!1 == "cnf")) . (assert (all (\ clause -> last clause == "0") . tail $ contentLines)) $ cnf
+        cnf = Set.fromList . map makeClause . tail $ contentLines
+    in assert (pLine!!1 == "cnf") . assert (all (\ clause -> last clause == "0") . tail $ contentLines) $ cnf
 
 
 solve :: SATInstance -> Result
