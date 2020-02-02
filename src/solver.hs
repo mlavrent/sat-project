@@ -69,4 +69,10 @@ formatOutput fileName res =
 
 
 main :: IO ()
-main = interact $ (formatOutput "myfile.cnf") . solve . parseCNF
+main = do
+    args <- getArgs
+    let file = head args
+    print file
+    contents <- readFile file
+    let result = solve . parseCNF $ contents
+    print (formatOutput file result)
