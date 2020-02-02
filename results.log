@@ -1,0 +1,17 @@
+Instance: C1065_064.cnf Time: 5.12 Result: SAT
+Instance: C1065_082.cnf Time: 4.46 Result: SAT
+Instance: C140.cnf Time: 9.10 Result: SAT
+Instance: C1597_024.cnf Time: 20.05 Result: UNSAT
+Instance: C1597_060.cnf Time: 30.05 Result: SAT
+Instance: C1597_081.cnf Time: 22.06 Result: SAT
+Instance: C168_128.cnf Time: -- Result: --
+Instance: C181_3151.cnf Time: 14.06 Result: SAT
+Instance: C208_120.cnf Time: 54.07 Result: SAT
+Instance: C208_3254.cnf Time: 12.08 Result: SAT
+Instance: C210_30.cnf Time: 15.08 Result: SAT
+Instance: C210_55.cnf Time: 17.07 Result: SAT
+Instance: C459_4675.cnf Time: -- Result: --
+Instance: U50_1065_038.cnf Time: 20.04 Result: SAT
+Instance: U50_1065_045.cnf Time: 10.05 Result: SAT
+Instance: U50_4450_035.cnf Time: 30.07 Result: SAT
+Instance: U75_1597_024.cnf Time: 12.05 Result: SAT
