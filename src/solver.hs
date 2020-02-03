@@ -12,7 +12,7 @@ type Variable = Int
 data Literal = Pos Variable | Neg Variable deriving (Ord, Eq, Show)
 type Clause = Set Literal
 type SATInstance = Set Clause
-data Result = Assignment [(Variable, Bool)] | Unsat --deriving (NFData)
+data Result = Assignment [(Variable, Bool)] | Unsat
 
 
 instance Show Result where
@@ -27,16 +27,6 @@ instance NFData Result where
 
 showBool :: Bool -> String
 showBool b = if b then "true" else "false"
-
-
-unitClauseElim :: Result -> SATInstance -> (Result, SATInstance)
-unitClauseElim Unsat satInst = (Unsat, satInst)
-unitClauseElim assn satInst = (assn, satInst)
-
-
-sameSignElim :: Result -> SATInstance -> (Result, SATInstance)
-sameSignElim Unsat satInst = (Unsat, satInst)
-sameSignElim assn satInst = (assn, satInst)
 
 
 makeLiteral :: String -> Literal
@@ -69,6 +59,17 @@ parseCNF input =
     in assert (pLine!!1 == "cnf") . assert (all (\ clause -> last clause == "0") . tail $ contentLines) $ cnf
 
 
+
+unitClauseElim :: Result -> SATInstance -> (Result, SATInstance)
+unitClauseElim Unsat satInst = (Unsat, satInst)
+unitClauseElim assn satInst = (assn, satInst)
+
+
+sameSignElim :: Result -> SATInstance -> (Result, SATInstance)
+sameSignElim Unsat satInst = (Unsat, satInst)
+sameSignElim assn satInst = (assn, satInst)
+
+
 solveWithAssn :: Result -> SATInstance -> Result
 solveWithAssn Unsat _ = Unsat
 solveWithAssn (Assignment assn) cnf = Unsat -- TODO edit this here
@@ -89,6 +90,6 @@ main = do
     let file = head args
     contents <- readFile file
     start <- getCurrentTime
-    let result = solve . parseCNF $ contents
-    end <- result `deepseq` getCurrentTime
-    print (formatOutput file (diffUTCTime end start) result)
+    let result = solve . parseCNF $ contents  -- parse and solve
+    end <- result `deepseq` getCurrentTime  -- force the computation and get end time
+    print (formatOutput file (diffUTCTime end start) result) -- print it out
