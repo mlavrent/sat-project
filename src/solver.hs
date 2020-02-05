@@ -6,7 +6,6 @@ import Text.Printf
 import Control.Exception
 import System.Environment
 import Control.DeepSeq
-import Control.Concurrent
 
 
 type Variable = Int
@@ -81,8 +80,8 @@ unitClauseElim (Assignment assn) cnf
     | otherwise =  -- get first unit clause, eliminate it, and recur
         let unitClause = find (\ c -> length c == 1) cnf
         in case unitClause of 
-            Nothing -> ((Assignment assn), cnf) -- no unit clauses
-            Just c -> case (elemAt 0 c) of
+            Nothing -> (Assignment assn, cnf) -- no unit clauses
+            Just c -> case elemAt 0 c of
                         Pos v -> unitClauseElim (Assignment ((v, True):assn)) cnf --TOD0: modify cnf to remove clauses
                         Neg v -> unitClauseElim (Assignment ((v, False):assn)) cnf
 
