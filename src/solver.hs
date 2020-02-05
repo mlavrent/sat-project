@@ -1,5 +1,6 @@
 import qualified Data.Set as Set
-import Data.Set (Set)
+import Data.Set (Set, unions, elemAt)
+import Data.List (find)
 import Data.Time
 import Text.Printf
 import Control.Exception
@@ -59,10 +60,31 @@ parseCNF input =
     in assert (pLine!!1 == "cnf") . assert (all (\ clause -> last clause == "0") . tail $ contentLines) $ cnf
 
 
+getAllVars :: SATInstance -> Set Variable
+getAllVars = unions . Set.map unpackClause
+
+unpackClause :: Clause -> Set Variable
+unpackClause = Set.map litToVar
+    where 
+      litToVar (Pos v) = v
+      litToVar (Neg v) = v
+
+
+nextAssignment :: SATInstance -> Variable
+nextAssignment cnf = 1
+
 
 unitClauseElim :: Result -> SATInstance -> (Result, SATInstance)
-unitClauseElim Unsat satInst = (Unsat, satInst)
-unitClauseElim assn satInst = (assn, satInst)
+unitClauseElim Unsat cnf = (Unsat, cnf)
+unitClauseElim (Assignment assn) cnf
+    | Set.null cnf  = ((Assignment assn), cnf) -- empty cnf
+    | otherwise =  -- get first unit clause, eliminate it, and recur
+        let unitClause = find (\ c -> length c == 1) cnf
+        in case unitClause of 
+            Nothing -> ((Assignment assn), cnf) -- no unit clauses
+            Just c -> case (elemAt 0 c) of
+                        Pos v -> unitClauseElim (Assignment ((v, True):assn)) cnf --TOD0: modify cnf to remove clauses
+                        Neg v -> unitClauseElim (Assignment ((v, False):assn)) cnf
 
 
 sameSignElim :: Result -> SATInstance -> (Result, SATInstance)
