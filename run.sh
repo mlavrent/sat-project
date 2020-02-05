@@ -13,4 +13,4 @@ fi
 input=$1
 
 # Pipe contents of file into the program
-cat $input | runhaskell src/solver.hs
+./solver $input
