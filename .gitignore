@@ -1,3 +1,6 @@
 *.exe
 *.hi
 *.o
+
+solver
+.stack-work/

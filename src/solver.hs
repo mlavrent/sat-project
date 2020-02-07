@@ -70,7 +70,7 @@ parseCNF input =
         allLines = lines input
         -- tokenize and remove comment lines
         tokLines =
-            map (\line -> words line) (filter (\line -> line /= "") allLines)
+            map words (filter (/= "") allLines)
         contentLines = filter (\tokLine -> head tokLine /= "c") tokLines
         -- make sure first line is problem line
         pLine        = if head (head contentLines) /= "p"
