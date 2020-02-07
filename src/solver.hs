@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 import qualified Data.Set                      as Set
 import           Data.Set                       ( Set
                                                 , unions
@@ -66,11 +67,9 @@ makeClause = Set.fromList . map makeLiteral . init
 
 parseCNF :: String -> SATInstance
 parseCNF input =
-    let
-        allLines = lines input
+    let allLines     = lines input
         -- tokenize and remove comment lines
-        tokLines =
-            map words (filter (/= "") allLines)
+        tokLines     = map words (filter (/= "") allLines)
         contentLines = filter (\tokLine -> head tokLine /= "c") tokLines
         -- make sure first line is problem line
         pLine        = if head (head contentLines) /= "p"
@@ -78,10 +77,9 @@ parseCNF input =
             else head contentLines
         -- Create a set of clauses from the content lines
         cnf = Set.fromList . map makeClause . tail $ contentLines
-    in
-        assert (pLine !! 1 == "cnf")
-        . assert (all (\clause -> last clause == "0") . tail $ contentLines)
-        $ cnf
+    in  assert (pLine !! 1 == "cnf")
+            . assert (all (\clause -> last clause == "0") . tail $ contentLines)
+            $ cnf
 
 
 -- Functions to implement DPLL algorithm
@@ -108,10 +106,13 @@ removeClausesWithLiteral :: Literal -> SATInstance -> SATInstance
 removeClausesWithLiteral literal = Set.filter (literal `Set.notMember`)
 
 removeNegatedLiteral :: Variable -> SATInstance -> SATInstance
-removeNegatedLiteral v =
-    Set.map (Set.filter (\cliteral -> case cliteral of 
-    Pos cv -> cv /= negate v
-    Neg cv -> cv /= negate v))
+removeNegatedLiteral v = Set.map
+    (Set.filter
+        (\case
+            Pos cv -> cv /= negate v
+            Neg cv -> cv /= negate v
+        )
+    )
 
 unitClauseElim :: Result -> SATInstance -> (Result, SATInstance)
 unitClauseElim Unsat cnf = (Unsat, cnf)
@@ -122,23 +123,27 @@ unitClauseElim (Assignment assn) cnf
       otherwise
     =  -- get first unit clause, eliminate it, and recur
       let unitClause = find (\c -> length c == 1) cnf
-      in  case unitClause of
+      in
+          case unitClause of
               Nothing -> (Assignment assn, cnf) -- no unit clauses
               Just c  -> case literal of
-                  Pos v -> unitClauseElim (Assignment ((v, True) : assn))
-                                          (removeClausesWithLiteral
-                                          literal
-                                          (removeNegatedLiteral v cnf))
-                  Neg v -> unitClauseElim (Assignment ((v, False) : assn))
-                                          (removeClausesWithLiteral
-                                          literal
-                                          (removeNegatedLiteral v cnf))
-                where literal =  elemAt 0 c
+                  Pos v -> unitClauseElim
+                      (Assignment ((v, True) : assn))
+                      (removeClausesWithLiteral literal
+                                                (removeNegatedLiteral v cnf)
+                      )
+                  Neg v -> unitClauseElim
+                      (Assignment ((v, False) : assn))
+                      (removeClausesWithLiteral literal
+                                                (removeNegatedLiteral v cnf)
+                      )
+                  where literal = elemAt 0 c
 
 
 solveWithAssn :: Result -> SATInstance -> Result
-solveWithAssn Unsat             _   = Unsat
-solveWithAssn (Assignment assn) cnf = Unsat -- TODO edit this here
+solveWithAssn Unsat _ = Unsat
+solveWithAssn (Assignment assn) cnf =
+    fst (unitClauseElim (Assignment assn) cnf)
 
 
 -- TODO

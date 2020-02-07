@@ -2,6 +2,6 @@
 *.hi
 *.o
 
-solver
+bin/
 .stack-work/
 .hlint.yaml
