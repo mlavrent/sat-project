@@ -4,3 +4,4 @@
 
 solver
 .stack-work/
+.hlint.yaml
