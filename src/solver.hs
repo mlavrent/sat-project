@@ -1,4 +1,8 @@
 import qualified Data.Set                      as Set
+import           Data.Set                       ( Set
+                                                , unions
+                                                , elemAt
+                                                )
 import           Data.Foldable                  ( find )
 import           Data.Time
 import           Text.Printf
@@ -12,8 +16,8 @@ import           Control.Concurrent
 
 type Variable = Int
 data Literal = Pos Variable | Neg Variable deriving (Ord, Eq, Show)
-type Clause = Set.Set Literal
-type SATInstance = Set.Set Clause
+type Clause = Set Literal
+type SATInstance = Set Clause
 data Result = Assignment [(Variable, Bool)] | Unsat
 
 
@@ -64,7 +68,7 @@ parseCNF :: String -> SATInstance
 parseCNF input =
     let
         allLines = lines input
-        --tokenize and remove comment lines
+        -- tokenize and remove comment lines
         tokLines =
             map (\line -> words line) (filter (\line -> line /= "") allLines)
         contentLines = filter (\tokLine -> head tokLine /= "c") tokLines
@@ -80,40 +84,58 @@ parseCNF input =
         $ cnf
 
 
-
 -- Functions to implement DPLL algorithm
 
-removeClausesWithLiteral :: Literal -> SATInstance -> SATInstance
-removeClausesWithLiteral literal = Set.filter (literal `Set.notMember`)
-
-removeNegatedLiteral :: Literal -> SATInstance -> SATInstance
-removeNegatedLiteral literal =
-    Set.map (Set.filter (\cliteral -> cliteral /= negateLiteral literal))
-
--- TODO: testing
-unitClauseElim :: Result -> SATInstance -> (Result, SATInstance)
-unitClauseElim Unsat satInst = (Unsat, satInst)
-unitClauseElim assn satInst =
-    ( assn
-    , let maybeUnitClause = find (\clause -> Set.size clause == 1) satInst
-      in
-          case maybeUnitClause of
-              Nothing -> satInst
-              Just unitClause ->
-                  let literal = Set.elemAt 0 unitClause
-                  in  removeClausesWithLiteral
-                          literal
-                          (removeNegatedLiteral literal satInst)
-    )
-
-
--- TODO: testing
 sameSignElim :: Result -> SATInstance -> (Result, SATInstance)
 sameSignElim Unsat satInst = (Unsat, satInst)
 sameSignElim assn  satInst = (assn, satInst)
 
 
--- TODO 
+getAllVars :: SATInstance -> Set Variable
+getAllVars = unions . Set.map unpackClause
+
+unpackClause :: Clause -> Set Variable
+unpackClause = Set.map litToVar
+  where
+    litToVar (Pos v) = v
+    litToVar (Neg v) = v
+
+
+nextAssignment :: SATInstance -> Variable
+nextAssignment cnf = 1
+
+removeClausesWithLiteral :: Literal -> SATInstance -> SATInstance
+removeClausesWithLiteral literal = Set.filter (literal `Set.notMember`)
+
+removeNegatedLiteral :: Variable -> SATInstance -> SATInstance
+removeNegatedLiteral v =
+    Set.map (Set.filter (\cliteral -> case cliteral of 
+    Pos cv -> cv /= negate v
+    Neg cv -> cv /= negate v))
+
+unitClauseElim :: Result -> SATInstance -> (Result, SATInstance)
+unitClauseElim Unsat cnf = (Unsat, cnf)
+unitClauseElim (Assignment assn) cnf
+    | Set.null cnf
+    = ((Assignment assn), cnf)
+    | -- empty cnf
+      otherwise
+    =  -- get first unit clause, eliminate it, and recur
+      let unitClause = find (\c -> length c == 1) cnf
+      in  case unitClause of
+              Nothing -> (Assignment assn, cnf) -- no unit clauses
+              Just c  -> case literal of
+                  Pos v -> unitClauseElim (Assignment ((v, True) : assn))
+                                          (removeClausesWithLiteral
+                                          literal
+                                          (removeNegatedLiteral v cnf))
+                  Neg v -> unitClauseElim (Assignment ((v, False) : assn))
+                                          (removeClausesWithLiteral
+                                          literal
+                                          (removeNegatedLiteral v cnf))
+                where literal =  elemAt 0 c
+
+
 solveWithAssn :: Result -> SATInstance -> Result
 solveWithAssn Unsat             _   = Unsat
 solveWithAssn (Assignment assn) cnf = Unsat -- TODO edit this here
@@ -135,6 +157,6 @@ main = do
     let file = head args
     contents <- readFile file
     start    <- getCurrentTime
-    let result = solve . parseCNF $ contents
-    end <- result `deepseq` getCurrentTime
-    print (formatOutput file (diffUTCTime end start) result)
+    let result = solve . parseCNF $ contents  -- parse and solve
+    end <- result `deepseq` getCurrentTime  -- force the computation and get end time
+    print (formatOutput file (diffUTCTime end start) result) -- print it out
