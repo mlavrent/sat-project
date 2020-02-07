@@ -1,0 +1,6 @@
+1) Run many randomized parallel solves (multithreaded essentially) 
+    - captures randomized restarts 
+    - or we could do exponential backtract limit 
+2) CDCL (conflict driven clause learning) 
+    - vsids ?
+3) Parameter search over the test cases
