@@ -5,5 +5,5 @@
 ########################################
 
 # Update this file with instructions on how to compile your code
-ghc src/solver.hs
+ghc -dynamic src/solver.hs
 mv src/solver bin/

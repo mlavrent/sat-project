@@ -1,4 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
 import qualified Data.Set                      as Set
 import           Data.Set                       ( Set )
 import           Data.Foldable                  ( find )
@@ -7,6 +6,7 @@ import           Data.Time
 import           Text.Printf
 import           Control.Exception
 import           System.Environment
+import           System.Random
 import           Control.DeepSeq
 import           Control.Concurrent
 
@@ -14,7 +14,9 @@ import           Control.Concurrent
 -- Data definitions
 
 type Variable = Int
-data Literal = Pos Variable | Neg Variable deriving (Ord, Eq, Show)
+data Literal = Literal { literalVal :: Variable
+                       , literalSign :: Bool
+                       } deriving (Ord, Eq, Show)
 type Clause = Set Literal
 type SATInstance = Set Clause
 data Result = Assignment [(Variable, Bool)] | Unsat
@@ -45,9 +47,9 @@ makeLiteral litInt =
     let absLit = abs litInt
     in
         (if litInt > 0
-            then Pos absLit
+            then Literal absLit True
             else if litInt < 0
-                then Neg absLit
+                then Literal absLit False
                 else
                     error
                         "Error: Literal must be either postive or negative number"
@@ -56,16 +58,15 @@ makeLiteral litInt =
 makeLiteralFromStr :: String -> Literal
 makeLiteralFromStr litStr = makeLiteral (read litStr)
 
+negateLiteral :: Literal -> Literal
+negateLiteral = makeLiteral . negate . literalVal
+
 makeClause :: [String] -> Clause
 makeClause = Set.fromList . map makeLiteralFromStr . init
 
-litToVar :: Literal -> Variable
-litToVar (Pos v) = v
-litToVar (Neg v) = v
-
 litToVarSigned :: Literal -> Variable
-litToVarSigned (Pos v) = v
-litToVarSigned (Neg v) = negate v
+litToVarSigned l =
+    if literalSign l then literalVal l else negate (literalVal l)
 
 parseCNF :: String -> SATInstance
 parseCNF input =
@@ -90,7 +91,7 @@ getAllVars :: SATInstance -> Set Variable
 getAllVars = Set.unions . Set.map unpackClause
 
 unpackClause :: Clause -> Set Variable
-unpackClause = Set.map litToVar
+unpackClause = Set.map literalVal
 
 nextAssignment :: SATInstance -> Variable
 nextAssignment cnf = 1
@@ -98,14 +99,8 @@ nextAssignment cnf = 1
 removeClausesWithLiteral :: Literal -> SATInstance -> SATInstance
 removeClausesWithLiteral literal = Set.filter (literal `Set.notMember`)
 
-removeNegatedLiteral :: Variable -> SATInstance -> SATInstance
-removeNegatedLiteral v = Set.map
-    (Set.filter
-        (\case
-            Pos cv -> cv /= negate v
-            Neg cv -> cv /= negate v
-        )
-    )
+removeNegatedLiteral :: Literal -> SATInstance -> SATInstance
+removeNegatedLiteral l = Set.map (Set.filter (/= negateLiteral l))
 
 unitClauseElim :: Result -> SATInstance -> (Result, SATInstance)
 unitClauseElim Unsat cnf = (Unsat, cnf)
@@ -114,20 +109,15 @@ unitClauseElim (Assignment assn) cnf
     = (Assignment assn, cnf)
     | otherwise -- get first unit clause, eliminate it, and recur
     = let unitClause = find (\c -> length c == 1) cnf
-      in
-          case unitClause of
+      in  case unitClause of
               Nothing -> (Assignment assn, cnf) -- no unit clauses
-              Just c  -> case literal of
-                  Pos v -> unitClauseElim
-                      (Assignment ((v, True) : assn))
-                      (removeClausesWithLiteral literal
-                                                (removeNegatedLiteral v cnf)
-                      )
-                  Neg v -> unitClauseElim
-                      (Assignment ((v, False) : assn))
-                      (removeClausesWithLiteral literal
-                                                (removeNegatedLiteral v cnf)
-                      )
+              Just c  -> unitClauseElim -- remove and recur
+                  (Assignment ((literalVal literal, literalSign literal) : assn)
+                  )
+                  ( removeClausesWithLiteral literal
+                  . removeNegatedLiteral literal
+                  $ cnf
+                  )
                   where literal = Set.elemAt 0 c
 
 assignmentAppend :: Result -> [(Variable, Bool)] -> Result
@@ -158,20 +148,54 @@ sameSignElim assn cnf
                           sameSignLits
               in  ( assignmentAppend assn new_assn
                   , Set.filter
-                      (\s -> not $ Set.null $ Set.intersection s sameSignLits)
+                      (\s -> Set.null $ Set.intersection s sameSignLits)
                       cnf
                   )
 
 
+-- Random functions 
+
+randPop :: Set a -> (a, Set a)
+randPop s = do
+    rand_num <- randomRIO (0, Set.size s)
+    return (Set.elemAt rand_num s, Set.deleteAt rand_num s)
+
+randomHeuristic :: SATInstance -> (Literal, SATInstance)
+randomHeuristic cnf =
+    let (clause, restCNF) = randPop cnf
+    in  let (poppedLiteral, restClause) = randPop clause
+        in  (poppedLiteral, Set.insert restClause restCNF)
 
 
 solveWithAssn :: Result -> SATInstance -> Result
 solveWithAssn Unsat _ = Unsat
-solveWithAssn (Assignment assn) cnf =
-    fst $ (uncurry sameSignElim . unitClauseElim (Assignment assn)) cnf
+solveWithAssn (Assignment assn) cnf
+    | Set.null cnf
+    = assn
+    | ((Set.size cnf) == 1) && (Set.null (Set.elemAt 0 cnf))
+    = Unsat
+    | otherwise
+    = let (n_assn, n_cnf) =
+                  (uncurry sameSignElim . unitClauseElim (Assignment assn)) cnf
+      in
+          let (literal, restCNF) = randomHeuristic n_cnf
+          in
+              case result_t of
+                  (Assignment t_assn) -> t_assn
+                  Unsat               -> case result_f of
+                      Unsat               -> Unsat
+                      (Assignment f_assn) -> f_assn
+                        where
+                          result_t = solveWithAssn
+                              (Assignment ((literalVal literal, True) : assn))
+                              restCNF
+                          result_f = solveWithAssn
+                              (Assignment ((literalVal literal, False) : assn))
+                              restCNF
 
 
--- TODO
+
+
 solve :: SATInstance -> Result
 solve = solveWithAssn (Assignment [])
 
