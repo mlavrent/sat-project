@@ -13,5 +13,8 @@ fi
 input=$1
 
 # Pipe contents of file into the program
-./compile.sh
+if [ ! ./bin/solver ] 
+then
+    ./compile.sh
+fi
 ./bin/solver $input
