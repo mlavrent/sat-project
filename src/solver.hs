@@ -1,10 +1,8 @@
 {-# LANGUAGE LambdaCase #-}
 import qualified Data.Set                      as Set
-import           Data.Set                       ( Set
-                                                , unions
-                                                , elemAt
-                                                )
+import           Data.Set                       ( Set )
 import           Data.Foldable                  ( find )
+import qualified Data.Map                      as Map
 import           Data.Time
 import           Text.Printf
 import           Control.Exception
@@ -25,7 +23,7 @@ data Result = Assignment [(Variable, Bool)] | Unsat
 instance Show Result where
     show Unsat             = "UNSAT"
     show (Assignment assn) = foldl
-        (\str (var, bool) -> str ++ show var ++ " " ++ showBool bool)
+        (\str (var, bool) -> str ++ show var ++ " " ++ showBool bool ++ " ")
         ""
         assn
 
@@ -37,19 +35,14 @@ instance NFData Result where
 
 -- Functions for defined data types
 
-negateLiteral :: Literal -> Literal
-negateLiteral literal = literal
-
 showBool :: Bool -> String
 showBool b = if b then "true" else "false"
 
 -- Functions to generate SAT Instance from DIMACS file
 
-makeLiteral :: String -> Literal
-makeLiteral litStr =
-    let
-        litInt = read litStr
-        absLit = abs litInt
+makeLiteral :: Int -> Literal
+makeLiteral litInt =
+    let absLit = abs litInt
     in
         (if litInt > 0
             then Pos absLit
@@ -60,10 +53,19 @@ makeLiteral litStr =
                         "Error: Literal must be either postive or negative number"
         )
 
+makeLiteralFromStr :: String -> Literal
+makeLiteralFromStr litStr = makeLiteral (read litStr)
 
 makeClause :: [String] -> Clause
-makeClause = Set.fromList . map makeLiteral . init
+makeClause = Set.fromList . map makeLiteralFromStr . init
 
+litToVar :: Literal -> Variable
+litToVar (Pos v) = v
+litToVar (Neg v) = v
+
+litToVarSigned :: Literal -> Variable
+litToVarSigned (Pos v) = v
+litToVarSigned (Neg v) = negate v
 
 parseCNF :: String -> SATInstance
 parseCNF input =
@@ -84,20 +86,11 @@ parseCNF input =
 
 -- Functions to implement DPLL algorithm
 
-sameSignElim :: Result -> SATInstance -> (Result, SATInstance)
-sameSignElim Unsat satInst = (Unsat, satInst)
-sameSignElim assn  satInst = (assn, satInst)
-
-
 getAllVars :: SATInstance -> Set Variable
-getAllVars = unions . Set.map unpackClause
+getAllVars = Set.unions . Set.map unpackClause
 
 unpackClause :: Clause -> Set Variable
 unpackClause = Set.map litToVar
-  where
-    litToVar (Pos v) = v
-    litToVar (Neg v) = v
-
 
 nextAssignment :: SATInstance -> Variable
 nextAssignment cnf = 1
@@ -117,12 +110,10 @@ removeNegatedLiteral v = Set.map
 unitClauseElim :: Result -> SATInstance -> (Result, SATInstance)
 unitClauseElim Unsat cnf = (Unsat, cnf)
 unitClauseElim (Assignment assn) cnf
-    | Set.null cnf
-    = ((Assignment assn), cnf)
-    | -- empty cnf
-      otherwise
-    =  -- get first unit clause, eliminate it, and recur
-      let unitClause = find (\c -> length c == 1) cnf
+    | Set.null cnf -- empty cnf
+    = (Assignment assn, cnf)
+    | otherwise -- get first unit clause, eliminate it, and recur
+    = let unitClause = find (\c -> length c == 1) cnf
       in
           case unitClause of
               Nothing -> (Assignment assn, cnf) -- no unit clauses
@@ -137,13 +128,47 @@ unitClauseElim (Assignment assn) cnf
                       (removeClausesWithLiteral literal
                                                 (removeNegatedLiteral v cnf)
                       )
-                  where literal = elemAt 0 c
+                  where literal = Set.elemAt 0 c
+
+assignmentAppend :: Result -> [(Variable, Bool)] -> Result
+assignmentAppend Unsat             _        = Unsat
+assignmentAppend (Assignment assn) new_assn = Assignment (assn ++ new_assn)
+
+
+sameSignElim :: Result -> SATInstance -> (Result, SATInstance)
+sameSignElim Unsat cnf = (Unsat, cnf)
+sameSignElim assn cnf
+    | Set.null cnf -- empty cnf
+    = (assn, cnf)
+    | otherwise -- get literal with same sign, eliminate it
+    = let vars = concatMap (map litToVarSigned . Set.toList) $ Set.toList cnf
+      in
+          let
+              sameSignLits = Set.fromList
+                  (map
+                      makeLiteral
+                      (filter (\x -> (length . filter (== x)) vars == 1) vars)
+                  )
+          in
+              let
+                  new_assn =
+                      ( Set.toList
+                          . Set.map ((\v -> (v, v >= 0)) . litToVarSigned)
+                          ) -- to fix: assignment contains negatives and pos
+                          sameSignLits
+              in  ( assignmentAppend assn new_assn
+                  , Set.filter
+                      (\s -> not $ Set.null $ Set.intersection s sameSignLits)
+                      cnf
+                  )
+
+
 
 
 solveWithAssn :: Result -> SATInstance -> Result
 solveWithAssn Unsat _ = Unsat
 solveWithAssn (Assignment assn) cnf =
-    fst (unitClauseElim (Assignment assn) cnf)
+    fst $ (uncurry sameSignElim . unitClauseElim (Assignment assn)) cnf
 
 
 -- TODO
