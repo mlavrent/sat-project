@@ -5,4 +5,8 @@
 ########################################
 
 # Update this file with instructions on how to compile your code
-ghc -dynamic -o bin/solver -odir bin/ -hidir bin/ src/solver.hs
+if [[ $(hostname) = 'NPx1carbon' ]]; then
+    ghc -dynamic -o bin/solver -odir bin/ -hidir bin/ src/solver.hs
+else 
+    ghc -o bin/solver -odir bin/ -hidir bin/ src/solver.hs
+fi 

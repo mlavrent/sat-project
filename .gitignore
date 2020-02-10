@@ -5,3 +5,4 @@
 bin/
 .stack-work/
 .hlint.yaml
+.cabal
