@@ -85,9 +85,6 @@ parseCNF input =
 
 -- Functions to implement DPLL algorithm
 
-getAllVars :: SATInstance -> Set Variable
-getAllVars = Set.unions . Set.map (Set.map literalVar)
-
 removeClausesWithLiteral :: Literal -> SATInstance -> SATInstance
 removeClausesWithLiteral literal = Set.filter (literal `Set.notMember`)
 
@@ -117,7 +114,6 @@ assignmentAppend :: Result -> [(Variable, Bool)] -> Result
 assignmentAppend Unsat             _        = Unsat
 assignmentAppend (Assignment assn) new_assn = Assignment (assn ++ new_assn)
 
--- TODO: this is adding negated variables to the result it returns
 sameSignElim :: Result -> SATInstance -> (Result, SATInstance)
 sameSignElim Unsat cnf = (Unsat, cnf)
 sameSignElim assn cnf
@@ -227,9 +223,11 @@ main = do
     args <- getArgs
     let file = head args
     contents <- readFile file
-    print (Set.map (Set.map litToVarSigned) (parseCNF contents))
+    let cnf = parseCNF contents
+    -- print (Set.map (Set.map litToVarSigned) cnf)
+    print (length . concat . map Set.toList $ (Set.toList cnf))
     randGen <- getStdGen
     start   <- getCurrentTime
-    let result = (solve randGen) . parseCNF $ contents  -- parse and solve
+    let result = (solve randGen) cnf  -- parse and solve
     end <- result `deepseq` getCurrentTime  -- force the computation and get end time
     print (formatOutput file (diffUTCTime end start) result) -- print it out
