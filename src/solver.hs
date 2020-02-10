@@ -1,20 +1,18 @@
 import qualified Data.Set                      as Set
 import           Data.Set                       ( Set )
 import           Data.Foldable                  ( find )
-import qualified Data.Map                      as Map
 import           Data.Time
 import           Text.Printf
 import           Control.Exception
 import           System.Environment
 import           System.Random
 import           Control.DeepSeq
-import           Control.Concurrent
 
 
 -- Data definitions
 
 type Variable = Int
-data Literal = Literal { literalVal :: Variable
+data Literal = Literal { literalVar :: Variable
                        , literalSign :: Bool
                        } deriving (Ord, Eq, Show)
 type Clause = Set Literal
@@ -51,22 +49,21 @@ makeLiteral litInt =
             else if litInt < 0
                 then Literal absLit False
                 else
-                    error
-                        "Error: Literal must be either postive or negative number"
+                    error "Error: Literal must be either postive or negative number"
         )
 
 makeLiteralFromStr :: String -> Literal
 makeLiteralFromStr litStr = makeLiteral (read litStr)
 
 negateLiteral :: Literal -> Literal
-negateLiteral = makeLiteral . negate . literalVal
+negateLiteral = makeLiteral . negate . literalVar
 
 makeClause :: [String] -> Clause
 makeClause = Set.fromList . map makeLiteralFromStr . init
 
 litToVarSigned :: Literal -> Variable
 litToVarSigned l =
-    if literalSign l then literalVal l else negate (literalVal l)
+    if literalSign l then literalVar l else negate (literalVar l)
 
 parseCNF :: String -> SATInstance
 parseCNF input =
@@ -88,7 +85,7 @@ parseCNF input =
 -- Functions to implement DPLL algorithm
 
 getAllVars :: SATInstance -> Set Variable
-getAllVars = Set.unions . Set.map (Set.map literalVal)
+getAllVars = Set.unions . Set.map (Set.map literalVar)
 
 removeClausesWithLiteral :: Literal -> SATInstance -> SATInstance
 removeClausesWithLiteral literal = Set.filter (literal `Set.notMember`)
@@ -96,6 +93,7 @@ removeClausesWithLiteral literal = Set.filter (literal `Set.notMember`)
 removeNegatedLiteral :: Literal -> SATInstance -> SATInstance
 removeNegatedLiteral l = Set.map (Set.filter (/= negateLiteral l))
 
+-- TODO: this is adding duplicates to the result it returns
 unitClauseElim :: Result -> SATInstance -> (Result, SATInstance)
 unitClauseElim Unsat cnf = (Unsat, cnf)
 unitClauseElim (Assignment assn) cnf
@@ -106,7 +104,7 @@ unitClauseElim (Assignment assn) cnf
       in  case unitClause of
               Nothing -> (Assignment assn, cnf) -- no unit clauses
               Just c  -> unitClauseElim -- remove and recur
-                  (Assignment ((literalVal literal, literalSign literal) : assn)
+                  (Assignment ((literalVar literal, literalSign literal) : assn)
                   )
                   ( removeClausesWithLiteral literal
                   . removeNegatedLiteral literal
@@ -119,6 +117,7 @@ assignmentAppend Unsat             _        = Unsat
 assignmentAppend (Assignment assn) new_assn = Assignment (assn ++ new_assn)
 
 
+-- TODO: this is adding negated variables to the result it returns
 sameSignElim :: Result -> SATInstance -> (Result, SATInstance)
 sameSignElim Unsat cnf = (Unsat, cnf)
 sameSignElim assn cnf
@@ -150,45 +149,51 @@ sameSignElim assn cnf
 -- Random functions 
 
 randPop :: RandomGen g => g -> Set a -> (a, Set a)
-randPop randGen s =
-    let (rand_num, newGen) = randomR (0, length s) randGen
-    in (Set.elemAt rand_num s, Set.deleteAt rand_num s)
+randPop randGen s
+    | Set.null s 
+    = error "Error: Empty set passed to pop from"
+    | otherwise
+    = let (rand_num, _) = randomR (0, length s - 1) randGen
+      in (Set.elemAt rand_num s, Set.deleteAt rand_num s)
 
 randomHeuristic :: RandomGen g => g -> SATInstance -> (Literal, SATInstance)
 randomHeuristic randGen cnf =
     let (clause, restCNF) = randPop randGen cnf
-    in  let (poppedLiteral, restClause) = randPop randGen clause
-        in  (poppedLiteral, Set.insert restClause restCNF)
+        (poppedLiteral, restClause) = randPop randGen clause
+    in  (poppedLiteral, Set.insert restClause restCNF)
 
+
+isEmptyCNF :: SATInstance -> Bool
+isEmptyCNF = Set.null
+
+hasEmptyClause :: SATInstance -> Bool
+hasEmptyClause = (any Set.null) . Set.toList
 
 solveWithAssn :: RandomGen g => Result -> g -> SATInstance -> Result
 solveWithAssn Unsat _ _ = Unsat
-solveWithAssn (Assignment assn) randGen cnf
-    | Set.null cnf
-    = assn
-    | ((Set.size cnf) == 1) && (Set.null (Set.elemAt 0 cnf))
+solveWithAssn res@(Assignment assn) randGen cnf
+    | isEmptyCNF cnf
+    = res
+    | hasEmptyClause cnf
     = Unsat
-    | otherwise
-    = let (n_assn, n_cnf) =
-                  (uncurry sameSignElim . unitClauseElim (Assignment assn)) cnf
+    | otherwise              -- TODO: something wonky going on in inference here
+    = let (newAssn, newCNF) = uncurry sameSignElim . unitClauseElim res $ cnf
+          (rg1, rg2) = split randGen
       in
-          let (literal, restCNF) = randomHeuristic randGen n_cnf
-          in
-              case result_t of
-                  (Assignment t_assn) -> t_assn
-                  Unsat               -> case result_f of
-                      Unsat               -> Unsat
-                      (Assignment f_assn) -> f_assn
-                        where
-                          (randGen1, randGen2) = split randGen
-                          result_t = solveWithAssn
-                              (Assignment ((literalVal literal, True) : assn))
-                              randGen1
-                              restCNF
-                          result_f = solveWithAssn
-                              (Assignment ((literalVal literal, False) : assn))
-                              randGen2
-                              restCNF
+          if isEmptyCNF newCNF 
+              then newAssn
+          else if hasEmptyClause newCNF
+              then Unsat
+          else
+              let (literal, restCNF) = randomHeuristic randGen newCNF
+                  resultT = solveWithAssn (Assignment ((literalVar literal, True) : assn)) rg1 restCNF
+                  resultF = solveWithAssn (Assignment ((literalVar literal, False) : assn)) rg2 restCNF
+              in
+                  case resultT of
+                      tAssn@(Assignment _) -> tAssn
+                      Unsat                -> case resultF of
+                          Unsat                -> Unsat
+                          fAssn@(Assignment _) -> fAssn
 
 
 
@@ -207,6 +212,7 @@ main = do
     args <- getArgs
     let file = head args
     contents <- readFile file
+    print (parseCNF contents)
     randGen  <- getStdGen
     start    <- getCurrentTime
     let result = (solve randGen) . parseCNF $ contents  -- parse and solve
