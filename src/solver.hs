@@ -6,7 +6,11 @@ import           Text.Printf
 import           Control.Exception
 import           System.Environment
 import           System.Random
+import           Debug.Trace
 import           Control.DeepSeq
+
+-- Debug build 
+debug = flip trace
 
 
 -- Data definitions
@@ -57,7 +61,7 @@ makeLiteralFromStr :: String -> Literal
 makeLiteralFromStr litStr = makeLiteral (read litStr)
 
 negateLiteral :: Literal -> Literal
-negateLiteral = makeLiteral . negate . literalVar
+negateLiteral l = Literal (literalVar l) (not (literalSign l))
 
 makeClause :: [String] -> Clause
 makeClause = Set.fromList . map makeLiteralFromStr . init
@@ -91,62 +95,87 @@ removeClausesWithLiteral literal = Set.filter (literal `Set.notMember`)
 removeNegatedLiteral :: Literal -> SATInstance -> SATInstance
 removeNegatedLiteral l = Set.map (Set.filter (/= negateLiteral l))
 
+compactify :: SATInstance -> Set (Set Variable)
+compactify = Set.map (Set.map litToVarSigned)
+
 -- TODO: this is adding duplicates to the result it returns
 unitClauseElim :: Result -> SATInstance -> (Result, SATInstance)
 unitClauseElim Unsat cnf = (Unsat, cnf)
 unitClauseElim (Assignment assn) cnf
     | Set.null cnf -- empty cnf
     = (Assignment assn, cnf)
-    | otherwise -- get first unit clause, eliminate it, and recur
+    | -- `debug` "UCE: null, called with " ++ show (assn, compactify cnf)
+      otherwise -- get first unit clause, eliminate it, and recur
     = let unitClause = find (\c -> length c == 1) cnf
-      in  case unitClause of
-              Nothing -> (Assignment assn, cnf) -- no unit clauses
-              Just c  -> unitClauseElim -- remove and recur
+      in
+          case unitClause of
+              Nothing -> -- no unit clauses
+                  (Assignment assn, cnf)
+                      -- `debug` "UCE: noth, unit "
+                      -- ++      show unitClause
+              Just c -> -- remove and recur
+                        unitClauseElim 
+                        -- `debug` "UCE: just, unit " ++ show
+                        -- (litToVarSigned literal)
                   (Assignment ((literalVar literal, literalSign literal) : assn)
                   )
-                  ( removeClausesWithLiteral literal
-                  . removeNegatedLiteral literal
-                  $ cnf
+                  (       ( removeClausesWithLiteral literal
+                          . removeNegatedLiteral literal
+                          $ cnf
+                          )
+                  -- `debug` "UCE: removing "
+                  -- ++      show (litToVarSigned literal, compactify cnf)
                   )
                   where literal = Set.elemAt 0 c
 
-assignmentAppend :: Result -> [(Variable, Bool)] -> Result
-assignmentAppend Unsat             _        = Unsat
-assignmentAppend (Assignment assn) new_assn = Assignment (assn ++ new_assn)
+assignmentAppend :: Result -> Result -> Result
+assignmentAppend Unsat _ = Unsat
+assignmentAppend (Assignment assn) (Assignment new_assn) =
+    Assignment (assn ++ new_assn)
 
 sameSignElim :: Result -> SATInstance -> (Result, SATInstance)
 sameSignElim Unsat cnf = (Unsat, cnf)
-sameSignElim assn cnf
+sameSignElim res@(Assignment assn) cnf
     | Set.null cnf -- empty cnf
-    = (assn, cnf)
+    = (res, cnf)
+    -- `debug` "SSE: null, called with " ++ show
+    --     (assn, compactify cnf)
     | otherwise -- get literal with same sign, eliminate it
-    = let vars = concatMap (map litToVarSigned . Set.toList) $ Set.toList cnf
-      in
-          let
-              sameSignLits = Set.fromList
-                  (map
-                      makeLiteral
-                      (filter
-                          (\x ->
-                              (length . filter (\v -> v == x || v == negate x))
-                                      vars
-                                  == 1
-                          )
-                          vars
-                      )
-                  )
+    = -- trace ("SSE: othw, called with " ++ show (assn, compactify cnf)) $
+    let vars =
+                  concatMap (map litToVarSigned . Set.toList) $ Set.toList cnf
           in
               let
-                  new_assn =
-                      ( Set.toList
-                          . Set.map ((\v -> (v, v >= 0)) . litToVarSigned)
+                  sameSignLits = Set.fromList
+                      (map
+                          makeLiteral
+                          (filter
+                              (\x ->
+                                  ( length
+                                      . filter (\v -> v == x || v == negate x)
+                                      )
+                                          vars
+                                      == 1
+                              )
+                              vars
                           )
-                          sameSignLits
-              in  ( assignmentAppend assn new_assn
-                  , Set.filter
-                      (\s -> Set.null $ Set.intersection s sameSignLits)
-                      cnf
-                  )
+                      )
+              in
+                  let
+                      new_assn = Assignment
+                          ((Set.toList . Set.map
+                               ((\v -> (v, v >= 0)) . litToVarSigned)
+                           )
+                              sameSignLits
+                          )
+                  in
+                      ( assignmentAppend res new_assn
+                      , Set.filter
+                          (\s -> Set.null $ Set.intersection s sameSignLits)
+                          cnf
+                      )
+                      -- `debug` "SSE: sameSignLits "
+                      -- ++      show (Set.map litToVarSigned sameSignLits)
 
 
 -- Random functions 
@@ -173,40 +202,69 @@ hasEmptyClause :: SATInstance -> Bool
 hasEmptyClause = (any Set.null) . Set.toList
 
 solveWithAssn :: RandomGen g => Result -> g -> SATInstance -> Result
-solveWithAssn Unsat _ _ = Unsat
+solveWithAssn Unsat _ cnf = trace ("SOL: got unsat" ++ show (cnf)) Unsat
 solveWithAssn res@(Assignment assn) randGen cnf
     | isEmptyCNF cnf
-    = res
+    = res 
+    -- `debug` "SOL: cnf empty " ++ show (res, compactify cnf)
     | hasEmptyClause cnf
-    = Unsat
-    | otherwise              -- TODO: something wonky going on in inference here
+    = Unsat 
+    -- `debug` "SOL: cnf has empty " ++ show (res, compactify cnf)
+    | otherwise -- TODO: something wonky going on in inference here
     = let
-          (newAssn, newCNF) = uncurry sameSignElim . unitClauseElim res $ cnf
-          (rg1    , rg2   ) = split randGen
+          (newRes@(Assignment newAssn), newCNF) =
+              comp 
+              -- `debug` "SOL: after round " ++ show
+              --     (fst comp, compactify . snd $ comp)
+              where comp = uncurry sameSignElim . unitClauseElim res $ cnf
+          (rg1, rg2) = split randGen
       in
           if isEmptyCNF newCNF
-              then newAssn
+              then newRes 
+              -- `debug` "SOL: ncnf empty " ++ show (newRes, newCNF)
               else if hasEmptyClause newCNF
-                  then Unsat
+                  then Unsat 
+                  -- `debug` "SOL: ncnf has empty " ++ show
+                      -- (newRes, newCNF)
                   else
                       let
                           (literal, restCNF) = randomHeuristic randGen newCNF
-                          resultT            = solveWithAssn
-                              (Assignment ((literalVar literal, True) : assn))
-                              rg1
-                              restCNF
-                          resultF = solveWithAssn
-                              (Assignment ((literalVar literal, False) : assn))
-                              rg2
-                              restCNF
+                          resultT =
+                              (solveWithAssn
+                                      (Assignment
+                                          ((literalVar literal, True) : newAssn)
+                                      )
+                                      rg1
+                                      restCNF
+                                  )
+                                  -- `debug` "SOL: trying true "
+                                  -- ++      show (litToVarSigned literal)
+                          resultF =
+                              (solveWithAssn
+                                      (Assignment
+                                          ((literalVar literal, False) : newAssn)
+                                      )
+                                      rg2
+                                      restCNF
+                                  )
+                                  -- `debug` "SOL: trying false "
+                                  -- ++      show (litToVarSigned literal)
                       in
                           case resultT of
-                              tAssn@(Assignment _) -> tAssn
-                              Unsat                -> case resultF of
-                                  Unsat                -> Unsat
-                                  fAssn@(Assignment _) -> fAssn
+                              tAssn@(Assignment _) ->
+                                  tAssn 
+                                  -- `debug` "SOL: was t " ++ show
+                                  --     (resultT, resultF)
+                              Unsat -> case resultF of
+                                  fAssn@(Assignment _) ->
+                                      fAssn 
+                                      -- `debug` "SOL: was f " ++ show
+                                      --     (resultT, resultF)
 
-
+                                  Unsat ->
+                                      Unsat 
+                                      -- `debug` "SOL: was unsat " ++ show
+                                      --     (resultT, resultF)
 
 
 solve :: StdGen -> SATInstance -> Result
@@ -224,7 +282,7 @@ main = do
     let file = head args
     contents <- readFile file
     let cnf = parseCNF contents
-    -- print (Set.map (Set.map litToVarSigned) cnf)
+    print (compactify cnf)
     print (length . concat . map Set.toList $ (Set.toList cnf))
     randGen <- getStdGen
     start   <- getCurrentTime
