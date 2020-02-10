@@ -88,13 +88,7 @@ parseCNF input =
 -- Functions to implement DPLL algorithm
 
 getAllVars :: SATInstance -> Set Variable
-getAllVars = Set.unions . Set.map unpackClause
-
-unpackClause :: Clause -> Set Variable
-unpackClause = Set.map literalVal
-
-nextAssignment :: SATInstance -> Variable
-nextAssignment cnf = 1
+getAllVars = Set.unions . Set.map (Set.map literalVal)
 
 removeClausesWithLiteral :: Literal -> SATInstance -> SATInstance
 removeClausesWithLiteral literal = Set.filter (literal `Set.notMember`)
@@ -155,21 +149,21 @@ sameSignElim assn cnf
 
 -- Random functions 
 
-randPop :: Set a -> (a, Set a)
-randPop s = do
-    rand_num <- randomRIO (0, Set.size s)
-    return (Set.elemAt rand_num s, Set.deleteAt rand_num s)
+randPop :: RandomGen g => g -> Set a -> (a, Set a)
+randPop randGen s =
+    let (rand_num, newGen) = randomR (0, length s) randGen
+    in (Set.elemAt rand_num s, Set.deleteAt rand_num s)
 
-randomHeuristic :: SATInstance -> (Literal, SATInstance)
-randomHeuristic cnf =
-    let (clause, restCNF) = randPop cnf
-    in  let (poppedLiteral, restClause) = randPop clause
+randomHeuristic :: RandomGen g => g -> SATInstance -> (Literal, SATInstance)
+randomHeuristic randGen cnf =
+    let (clause, restCNF) = randPop randGen cnf
+    in  let (poppedLiteral, restClause) = randPop randGen clause
         in  (poppedLiteral, Set.insert restClause restCNF)
 
 
-solveWithAssn :: Result -> SATInstance -> Result
-solveWithAssn Unsat _ = Unsat
-solveWithAssn (Assignment assn) cnf
+solveWithAssn :: RandomGen g => Result -> g -> SATInstance -> Result
+solveWithAssn Unsat _ _ = Unsat
+solveWithAssn (Assignment assn) randGen cnf
     | Set.null cnf
     = assn
     | ((Set.size cnf) == 1) && (Set.null (Set.elemAt 0 cnf))
@@ -178,7 +172,7 @@ solveWithAssn (Assignment assn) cnf
     = let (n_assn, n_cnf) =
                   (uncurry sameSignElim . unitClauseElim (Assignment assn)) cnf
       in
-          let (literal, restCNF) = randomHeuristic n_cnf
+          let (literal, restCNF) = randomHeuristic randGen n_cnf
           in
               case result_t of
                   (Assignment t_assn) -> t_assn
@@ -186,17 +180,20 @@ solveWithAssn (Assignment assn) cnf
                       Unsat               -> Unsat
                       (Assignment f_assn) -> f_assn
                         where
+                          (randGen1, randGen2) = split randGen
                           result_t = solveWithAssn
                               (Assignment ((literalVal literal, True) : assn))
+                              randGen1
                               restCNF
                           result_f = solveWithAssn
                               (Assignment ((literalVal literal, False) : assn))
+                              randGen2
                               restCNF
 
 
 
 
-solve :: SATInstance -> Result
+solve :: StdGen -> SATInstance -> Result
 solve = solveWithAssn (Assignment [])
 
 
@@ -210,7 +207,8 @@ main = do
     args <- getArgs
     let file = head args
     contents <- readFile file
+    randGen  <- getStdGen
     start    <- getCurrentTime
-    let result = solve . parseCNF $ contents  -- parse and solve
+    let result = (solve randGen) . parseCNF $ contents  -- parse and solve
     end <- result `deepseq` getCurrentTime  -- force the computation and get end time
     print (formatOutput file (diffUTCTime end start) result) -- print it out
