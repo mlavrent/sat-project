@@ -130,7 +130,14 @@ sameSignElim assn cnf
               sameSignLits = Set.fromList
                   (map
                       makeLiteral
-                      (filter (\x -> (length . filter (\v -> v == x || v == negate x)) vars == 1) vars)
+                      (filter
+                          (\x ->
+                              (length . filter (\v -> v == x || v == negate x))
+                                      vars
+                                  == 1
+                          )
+                          vars
+                      )
                   )
           in
               let
