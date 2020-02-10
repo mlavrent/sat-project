@@ -49,7 +49,8 @@ makeLiteral litInt =
             else if litInt < 0
                 then Literal absLit False
                 else
-                    error "Error: Literal must be either postive or negative number"
+                    error
+                        "Error: Literal must be either postive or negative number"
         )
 
 makeLiteralFromStr :: String -> Literal
@@ -116,7 +117,6 @@ assignmentAppend :: Result -> [(Variable, Bool)] -> Result
 assignmentAppend Unsat             _        = Unsat
 assignmentAppend (Assignment assn) new_assn = Assignment (assn ++ new_assn)
 
-
 -- TODO: this is adding negated variables to the result it returns
 sameSignElim :: Result -> SATInstance -> (Result, SATInstance)
 sameSignElim Unsat cnf = (Unsat, cnf)
@@ -130,14 +130,14 @@ sameSignElim assn cnf
               sameSignLits = Set.fromList
                   (map
                       makeLiteral
-                      (filter (\x -> (length . filter (== x)) vars == 1) vars)
+                      (filter (\x -> (length . filter (\v -> v == x || v == negate x)) vars == 1) vars)
                   )
           in
               let
                   new_assn =
                       ( Set.toList
                           . Set.map ((\v -> (v, v >= 0)) . litToVarSigned)
-                          ) -- to fix: assignment contains negatives and pos
+                          )
                           sameSignLits
               in  ( assignmentAppend assn new_assn
                   , Set.filter
@@ -150,15 +150,15 @@ sameSignElim assn cnf
 
 randPop :: RandomGen g => g -> Set a -> (a, Set a)
 randPop randGen s
-    | Set.null s 
+    | Set.null s
     = error "Error: Empty set passed to pop from"
     | otherwise
     = let (rand_num, _) = randomR (0, length s - 1) randGen
-      in (Set.elemAt rand_num s, Set.deleteAt rand_num s)
+      in  (Set.elemAt rand_num s, Set.deleteAt rand_num s)
 
 randomHeuristic :: RandomGen g => g -> SATInstance -> (Literal, SATInstance)
 randomHeuristic randGen cnf =
-    let (clause, restCNF) = randPop randGen cnf
+    let (clause       , restCNF   ) = randPop randGen cnf
         (poppedLiteral, restClause) = randPop randGen clause
     in  (poppedLiteral, Set.insert restClause restCNF)
 
@@ -177,23 +177,31 @@ solveWithAssn res@(Assignment assn) randGen cnf
     | hasEmptyClause cnf
     = Unsat
     | otherwise              -- TODO: something wonky going on in inference here
-    = let (newAssn, newCNF) = uncurry sameSignElim . unitClauseElim res $ cnf
-          (rg1, rg2) = split randGen
+    = let
+          (newAssn, newCNF) = uncurry sameSignElim . unitClauseElim res $ cnf
+          (rg1    , rg2   ) = split randGen
       in
-          if isEmptyCNF newCNF 
+          if isEmptyCNF newCNF
               then newAssn
-          else if hasEmptyClause newCNF
-              then Unsat
-          else
-              let (literal, restCNF) = randomHeuristic randGen newCNF
-                  resultT = solveWithAssn (Assignment ((literalVar literal, True) : assn)) rg1 restCNF
-                  resultF = solveWithAssn (Assignment ((literalVar literal, False) : assn)) rg2 restCNF
-              in
-                  case resultT of
-                      tAssn@(Assignment _) -> tAssn
-                      Unsat                -> case resultF of
-                          Unsat                -> Unsat
-                          fAssn@(Assignment _) -> fAssn
+              else if hasEmptyClause newCNF
+                  then Unsat
+                  else
+                      let
+                          (literal, restCNF) = randomHeuristic randGen newCNF
+                          resultT            = solveWithAssn
+                              (Assignment ((literalVar literal, True) : assn))
+                              rg1
+                              restCNF
+                          resultF = solveWithAssn
+                              (Assignment ((literalVar literal, False) : assn))
+                              rg2
+                              restCNF
+                      in
+                          case resultT of
+                              tAssn@(Assignment _) -> tAssn
+                              Unsat                -> case resultF of
+                                  Unsat                -> Unsat
+                                  fAssn@(Assignment _) -> fAssn
 
 
 
@@ -212,9 +220,9 @@ main = do
     args <- getArgs
     let file = head args
     contents <- readFile file
-    print (parseCNF contents)
-    randGen  <- getStdGen
-    start    <- getCurrentTime
+    print (Set.map (Set.map litToVarSigned) (parseCNF contents))
+    randGen <- getStdGen
+    start   <- getCurrentTime
     let result = (solve randGen) . parseCNF $ contents  -- parse and solve
     end <- result `deepseq` getCurrentTime  -- force the computation and get end time
     print (formatOutput file (diffUTCTime end start) result) -- print it out
