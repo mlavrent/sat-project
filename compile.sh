@@ -5,4 +5,4 @@
 ########################################
 
 # Update this file with instructions on how to compile your code
-ghc -dynamic -o bin/solver -odir bin/ -hidir bin/ src/solver.hs
+ghc -o bin/solver -odir bin/ -hidir bin/ src/solver.hs
