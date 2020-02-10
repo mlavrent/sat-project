@@ -9,7 +9,8 @@ import           System.Random
 import           Debug.Trace
 import           Control.DeepSeq
 
--- Debug build 
+-- Debug build
+debug :: a -> String -> a
 debug = flip trace
 
 
@@ -130,12 +131,13 @@ unitClauseElim (Assignment assn) cnf
 
 assignmentAppend :: Result -> Result -> Result
 assignmentAppend Unsat _ = Unsat
+assignmentAppend _ Unsat = Unsat
 assignmentAppend (Assignment assn) (Assignment new_assn) =
     Assignment (assn ++ new_assn)
 
 sameSignElim :: Result -> SATInstance -> (Result, SATInstance)
 sameSignElim Unsat cnf = (Unsat, cnf)
-sameSignElim res@(Assignment assn) cnf
+sameSignElim res@(Assignment _) cnf
     | Set.null cnf -- empty cnf
     = (res, cnf)
     -- `debug` "SSE: null, called with " ++ show
@@ -203,7 +205,7 @@ hasEmptyClause = (any Set.null) . Set.toList
 
 solveWithAssn :: RandomGen g => Result -> g -> SATInstance -> Result
 solveWithAssn Unsat _ cnf = trace ("SOL: got unsat" ++ show (cnf)) Unsat
-solveWithAssn res@(Assignment assn) randGen cnf
+solveWithAssn res@(Assignment _) randGen cnf
     | isEmptyCNF cnf
     = res 
     -- `debug` "SOL: cnf empty " ++ show (res, compactify cnf)
@@ -282,8 +284,6 @@ main = do
     let file = head args
     contents <- readFile file
     let cnf = parseCNF contents
-    print (compactify cnf)
-    print (length . concat . map Set.toList $ (Set.toList cnf))
     randGen <- getStdGen
     start   <- getCurrentTime
     let result = (solve randGen) cnf  -- parse and solve
