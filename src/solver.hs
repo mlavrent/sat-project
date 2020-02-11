@@ -96,43 +96,39 @@ removeClausesWithLiteral :: Literal -> SATInstance -> SATInstance
 removeClausesWithLiteral literal = Set.filter (literal `Set.notMember`)
 
 removeNegatedLiteral :: Literal -> SATInstance -> SATInstance
-removeNegatedLiteral l = Set.map (Set.filter (/= negateLiteral l))
+removeNegatedLiteral literal = Set.map (Set.filter (/= negateLiteral literal))
 
-compactify :: SATInstance -> Set (Set Variable)
-compactify = Set.map (Set.map litToVarSigned)
+compactify :: SATInstance -> [[Variable]]
+compactify = Set.toList . Set.map (Set.toList . Set.map litToVarSigned)
 
--- TODO: this is adding duplicates to the result it returns
 unitClauseElim :: Result -> SATInstance -> (Result, SATInstance)
 unitClauseElim Unsat cnf = (Unsat, cnf)
-unitClauseElim (Assignment assn) cnf
+unitClauseElim res@(Assignment assn) cnf
     | Set.null cnf -- empty cnf
     = (Assignment assn, cnf)
     | -- `debug` "UCE: null, called with " ++ show (assn, compactify cnf)
       otherwise -- get first unit clause, eliminate it, and recur
-    = let unitClause = find (\c -> length c == 1) cnf
-      in  case unitClause of
-              Nothing -> -- no unit clauses
-                  (Assignment assn, cnf)
-                      -- `debug` "UCE: noth, unit "
-                      -- ++      show unitClause
-              Just c -> -- remove and recur
-                        unitClauseElim
-                        -- `debug` "UCE: just, unit " ++ show
-                        -- (litToVarSigned literal)
-                  (Assignment ((literalVar literal, literalSign literal) : assn)
-                  )
-                  (( removeClausesWithLiteral literal
-                   . removeNegatedLiteral literal
-                   $ cnf
-                   )
-                  -- `debug` "UCE: removing "
-                  -- ++      show (litToVarSigned literal, compactify cnf)
-                  )
-                  where literal = Set.elemAt 0 c
+    = let unitClauses = Set.unions (Set.filter (\c -> Set.size c == 1) cnf)
+      in  if Set.null unitClauses
+              then (Assignment assn, cnf)
+              else
+                  let new_assn =
+                          [ (literalVar literal, literalSign literal)
+                          | literal <- Set.toList unitClauses
+                          ]
+                  in  ( assignmentAppend res (Assignment new_assn)
+                      , (foldl (\cnf_inst func -> func cnf)
+                               cnf
+                               (map removals (Set.toList unitClauses))
+                        )
+                      )
+  where
+    removals =
+        (\lit -> removeClausesWithLiteral lit . removeNegatedLiteral lit)
 
 assignmentAppend :: Result -> Result -> Result
-assignmentAppend Unsat _ = Unsat
-assignmentAppend _ Unsat = Unsat
+assignmentAppend Unsat _     = Unsat
+assignmentAppend _     Unsat = Unsat
 assignmentAppend (Assignment assn) (Assignment new_assn) =
     Assignment (assn ++ new_assn)
 
@@ -205,19 +201,15 @@ solveWithAssn :: RandomGen g => Result -> g -> SATInstance -> Result
 solveWithAssn Unsat _ cnf = trace ("SOL: got unsat" ++ show (cnf)) Unsat
 solveWithAssn res@(Assignment _) randGen cnf
     | isEmptyCNF cnf
-    = res
-    |
-    -- `debug` "SOL: cnf empty " ++ show (res, compactify cnf)
-      hasEmptyClause cnf
-    = Unsat
-    |
-    -- `debug` "SOL: cnf has empty " ++ show (res, compactify cnf)
-      otherwise -- TODO: something wonky going on in inference here
+    = res `debug` ("SOL: cnf empty " ++ show (res, compactify cnf))
+    | hasEmptyClause cnf
+    = Unsat `debug` ("SOL: cnf has empty " ++ show (res, compactify cnf))
+    | otherwise -- TODO: something wonky going on in inference here
     = let
-          (newRes@(Assignment newAssn), newCNF) = comp
+          (newRes@(Assignment newAssn), newCNF) =
+              trace ("SOL: after round " ++ show (compactify . snd $ comp))
+                  $ comp
               where comp = uncurry sameSignElim . unitClauseElim res $ cnf
-              -- `debug` "SOL: after round " ++ show
-              --     (fst comp, compactify . snd $ comp)
           (rg1, rg2) = split randGen
       in
           if isEmptyCNF newCNF
@@ -232,37 +224,45 @@ solveWithAssn res@(Assignment _) randGen cnf
                           (literal, restCNF) = randomHeuristic randGen newCNF
                           resultT =
                               (solveWithAssn
-                                  (Assignment
-                                      ((literalVar literal, True) : newAssn)
+                                      (Assignment
+                                          ((literalVar literal, True) : newAssn)
+                                      )
+                                      rg1
+                                      restCNF
                                   )
-                                  rg1
-                                  restCNF
-                              )
-                                  -- `debug` "SOL: trying true "
-                                  -- ++      show (litToVarSigned literal)
+                                  `debug` (  "SOL: trying true "
+                                          ++ show (litToVarSigned literal)
+                                          )
                           resultF =
                               (solveWithAssn
-                                  (Assignment
-                                      ((literalVar literal, False) : newAssn)
+                                      (Assignment
+                                          ((literalVar literal, False) : newAssn)
+                                      )
+                                      rg2
+                                      restCNF
                                   )
-                                  rg2
-                                  restCNF
-                              )
-                                  -- `debug` "SOL: trying false "
-                                  -- ++      show (litToVarSigned literal)
+                                  `debug` (  "SOL: trying false "
+                                          ++ show (litToVarSigned literal)
+                                          )
                       in
                           case resultT of
-                              tAssn@(Assignment _) -> tAssn
-                                  -- `debug` "SOL: was t " ++ show
-                                  --     (resultT, resultF)
-                              Unsat                -> case resultF of
-                                  fAssn@(Assignment _) -> fAssn
-                                      -- `debug` "SOL: was f " ++ show
-                                      --     (resultT, resultF)
+                              tAssn@(Assignment _) ->
+                                  tAssn
+                                      `debug` (  "SOL: was t "
+                                              ++ show (resultT, resultF)
+                                              )
+                              Unsat -> case resultF of
+                                  fAssn@(Assignment _) ->
+                                      fAssn
+                                          `debug` ("SOL: was f " ++ show
+                                                      (resultT, resultF)
+                                                  )
 
-                                  Unsat                -> Unsat
-                                      -- `debug` "SOL: was unsat " ++ show
-                                      --     (resultT, resultF)
+                                  Unsat ->
+                                      Unsat
+                                          `debug` ("SOL: was unsat " ++ show
+                                                      (resultT, resultF)
+                                                  )
 
 
 solve :: StdGen -> SATInstance -> Result
