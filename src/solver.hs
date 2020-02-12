@@ -198,17 +198,17 @@ hasEmptyClause :: SATInstance -> Bool
 hasEmptyClause = (any Set.null) . Set.toList
 
 solveWithAssn :: RandomGen g => Result -> g -> SATInstance -> Result
-solveWithAssn Unsat _ cnf = trace ("SOL: got unsat" ++ show (cnf)) Unsat
+solveWithAssn Unsat _ cnf = Unsat -- `debug` "SOL: got unsat" ++ show (cnf)
 solveWithAssn res@(Assignment _) randGen cnf
     | isEmptyCNF cnf
-    = res `debug` ("SOL: cnf empty " ++ show (res, compactify cnf))
+    = res -- `debug` ("SOL: cnf empty " ++ show (res, compactify cnf))
     | hasEmptyClause cnf
-    = Unsat `debug` ("SOL: cnf has empty " ++ show (res, compactify cnf))
+    = Unsat -- `debug` ("SOL: cnf has empty " ++ show (res, compactify cnf))
     | otherwise -- TODO: something wonky going on in inference here
     = let
-          (newRes@(Assignment newAssn), newCNF) =
-              trace ("SOL: after round " ++ show (compactify . snd $ comp))
-                  $ comp
+          (newRes@(Assignment newAssn), newCNF) = comp
+              -- trace ("SOL: after round " ++ show (compactify . snd $ comp))
+              --    $ comp
               where comp = uncurry sameSignElim . unitClauseElim res $ cnf
           (rg1, rg2) = split randGen
       in
@@ -230,9 +230,9 @@ solveWithAssn res@(Assignment _) randGen cnf
                                       rg1
                                       restCNF
                                   )
-                                  `debug` (  "SOL: trying true "
-                                          ++ show (litToVarSigned literal)
-                                          )
+                                  -- `debug` (  "SOL: trying true "
+                                  --         ++ show (litToVarSigned literal)
+                                  --         )
                           resultF =
                               (solveWithAssn
                                       (Assignment
@@ -241,34 +241,35 @@ solveWithAssn res@(Assignment _) randGen cnf
                                       rg2
                                       restCNF
                                   )
-                                  `debug` (  "SOL: trying false "
-                                          ++ show (litToVarSigned literal)
-                                          )
+                                  -- `debug` (  "SOL: trying false "
+                                  --         ++ show (litToVarSigned literal)
+                                  --         )
                       in
                           case resultT of
                               tAssn@(Assignment _) ->
                                   tAssn
-                                      `debug` (  "SOL: was t "
-                                              ++ show (resultT, resultF)
-                                              )
+                                      -- `debug` (  "SOL: was t "
+                                      --         ++ show (resultT, resultF)
+                                      --         )
                               Unsat -> case resultF of
                                   fAssn@(Assignment _) ->
                                       fAssn
-                                          `debug` ("SOL: was f " ++ show
-                                                      (resultT, resultF)
-                                                  )
+                                          -- `debug` ("SOL: was f " ++ show
+                                          --             (resultT, resultF)
+                                          --         )
 
                                   Unsat ->
                                       Unsat
-                                          `debug` ("SOL: was unsat " ++ show
-                                                      (resultT, resultF)
-                                                  )
+                                          -- `debug` ("SOL: was unsat " ++ show
+                                          --             (resultT, resultF)
+                                          --         )
 
 
 solve :: StdGen -> SATInstance -> Result
 solve = solveWithAssn (Assignment [])
 
 
+-- has a bug
 solutionChecker :: Result -> SATInstance -> Maybe Bool
 solutionChecker Unsat _ = Nothing
 solutionChecker res@(Assignment assn) cnf =
@@ -293,6 +294,8 @@ formatOutput :: String -> NominalDiffTime -> Result -> String
 formatOutput file runTime res =
     printf "Instance %s Time: %s Result: %s" file (show runTime) (show res)
 
+numVar :: SATInstance -> Int 
+numVar cnf = length . concat . map Set.toList $ (Set.toList cnf)
 
 main :: IO ()
 main = do
@@ -300,6 +303,8 @@ main = do
     let file = head args
     contents <- readFile file
     let cnf = parseCNF contents
+    -- print (compactify cnf)
+    print (numVar cnf)
     randGen <- getStdGen
     start   <- getCurrentTime
     let result = (solve randGen) cnf  -- parse and solve
