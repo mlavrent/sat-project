@@ -115,7 +115,7 @@ def unitClauseElim(vars, clauseSet, assignment):
     while changed:
         changed = False
 
-        for clause in clauseSet:
+        for clause in copy(clauseSet):
             if len(clause.literalSet) == 1:
                 unitLit = clause.literalSet[0]
                 unitLitInv = Literal(unitLit.name, not unitLit.sign)
@@ -124,9 +124,9 @@ def unitClauseElim(vars, clauseSet, assignment):
                 vars.remove(unitLit)
                 changed = True
 
-                for otherClause in clauseSet:
+                for otherClause in copy(clauseSet):
                     # remove everywhere inverse shows up
-                    for otherLit in otherClause.literalSet:
+                    for otherLit in copy(otherClause.literalSet):
                         if otherLit == unitLitInv:
                             otherClause.literalSet.remove(otherLit)
 
@@ -156,7 +156,7 @@ def sameSignElim(vars, clauseSet, assignment):
                 changed = True
 
                 # remove all clauses containing that literal
-                for clause in clauseSet:
+                for clause in copy(clauseSet):
                     clauseSet.remove(clause)
     
     return assignment
@@ -166,8 +166,8 @@ def assignVariable(var, sign, vars, clauseSet, assignment):
     assignment[var] = sign
     vars.remove(var)
 
-    for clause in clauseSet:
-        for lit in clause.literalSet:
+    for clause in copy(clauseSet):
+        for lit in copy(clause.literalSet):
             if lit.name == var and lit.sign == sign:
                 clauseSet.remove(clause)
             elif lit.name == var and lit.sign != sign:
@@ -209,7 +209,13 @@ def solve(vars, clauseSet, assignment):
 
 
 def runSolver(conn, vars, clauseSet):
-    assignment = solve(vars, clauseSet, {})
+    assignment = solve(copy(vars), clauseSet, {})
+
+    # Assign any variable not already assigned to true
+    for v in vars:
+        if v not in assignment:
+            assignment[v] = True
+
     conn.put(assignment)
 
 
