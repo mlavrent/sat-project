@@ -12,4 +12,8 @@ fi
 	
 input=$1
 
-python3 solver.py $input
+# Haskell
+#./bin/solver $input
+
+# Python
+python3 src/solver.py
