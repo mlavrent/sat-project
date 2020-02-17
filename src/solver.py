@@ -149,11 +149,9 @@ def sameSignElim(vars, clauseSet, assignment):
                 allLiterals.add(lit)
 
         # find pure literals, remove them, and add to assignment
-        for lit in allLiterals:
+        for lit in copy(allLiterals):
             oppLit = Literal(lit.name, not lit.sign)
-            if oppLit in allLiterals:
-                allLiterals.remove(oppLit)
-            else:
+            if oppLit not in allLiterals:
                 assignment[lit.name] = lit.sign
                 changed = True
 
@@ -195,7 +193,7 @@ def solve(vars, clauseSet, assignment):
 
     # try solving down the first branch
     fVars = deepcopy(vars)
-    fClauseSet = deepcopy(vars)
+    fClauseSet = deepcopy(clauseSet)
     fAssignment = deepcopy(assignment)
 
     fClauseSet, fAssignment = assignVariable(var, sign, fVars, fClauseSet, fAssignment)
@@ -213,6 +211,24 @@ def solve(vars, clauseSet, assignment):
 def runSolver(conn, vars, clauseSet):
     assignment = solve(vars, clauseSet, {})
     conn.put(assignment)
+
+
+def verifySolution(assignment, clauseSet):
+    for clause in clauseSet:
+        clauseSatisfied = False
+        for lit in clauseSet.literalSet:
+            # this literal satisfied the clause
+            if assignment[lit.name] == lit.sign:
+                clauseSatisfied = True
+                break
+
+        # this clause not satisfied
+        if not clauseSatisfied:
+            return False
+
+    # all clauses satisfied
+    return True
+
 
 def readInput(cnfFile):
     variableSet = []
@@ -240,7 +256,7 @@ def printOutput(file, assignment, runTime):
     if assignment is not None:
         result = "SAT Solution:"
         for var in assignment:
-            result += " " + str(var) + ("true" if assignment[var] else "false")
+            result += " " + str(var) + " " + ("true" if assignment[var] else "false")
     else:
         result = "UNSAT"
 
