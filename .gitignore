@@ -6,3 +6,5 @@ bin/
 .stack-work/
 .hlint.yaml
 .cabal
+
+src/__pycache__/
