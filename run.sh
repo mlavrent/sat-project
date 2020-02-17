@@ -12,5 +12,4 @@ fi
 	
 input=$1
 
-# Pipe contents of file into the program
-./bin/solver $input
+python3 solver.py $input
