@@ -3,6 +3,7 @@ import sys
 import random
 from time import time
 from copy import copy, deepcopy
+import random
 
 
 class Literal:
@@ -45,15 +46,46 @@ def jerWang(vars, clauseSet):
     return "x", True
 
 
-def rdlis(vars, clauseSet):
+def rdlis(var, clauseSet):
     # implementation of randomized DLIS (dynamic largest individual sum)
-    ...
-    return "x", True
+    negOcc = 0
+    posOcc = 0
 
+    posLit = Literal(var, True)
+    negLit = Literal(var, False)
 
-def chooseVariableSplit(vars, clauseSet):
-    ...
-    return "x", True
+    for clause in clauseSet:
+        if posLit in clause:
+            posOcc += 1
+        if negLit in clause:
+            negOcc += 1
+
+    return max(posOcc, negOcc)
+
+def chooseVariableSplit(vars, clauseSet, heuristic):
+    # dictionary of our top candidates of form {var: (score, sign)}
+    topCands = {}
+    for v in vars:
+        vscore, vsign = heuristic(v, clauseSet)
+
+        # if top candidates not full, add to it
+        if len(topCands) < 5:
+            topCands[v] = (vscore, vsign)
+            continue
+
+        # otherwise replace worst candidate if better
+        worstTopCand = None
+        for cand in topCands:
+            if worstTopCand is None or topCands[cand][0] < topCands[worstTopCand][0]:
+                worstTopCand = cand
+        
+        if vscore > topCands[worstTopCand][0]:
+            del topCands[worstTopCand]
+            topCands[v] = (vscore, vsign)
+
+    # randomly choose a top candidate              
+    var, scoreSign = random.choice(list(topCands.items()))
+    return var, scoreSign[1]
 
 
 def unitClauseElim(vars, clauseSet, assignment):
@@ -137,7 +169,7 @@ def solve(vars, clauseSet, assignment):
         return assignment
 
     # decide which variable to split on
-    var, sign = chooseVariableSplit(vars, clauseSet)
+    var, sign = chooseVariableSplit(vars, clauseSet, rdlis)
 
     # try solving down the first branch
     fVars = deepcopy(vars)
