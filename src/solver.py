@@ -1,9 +1,9 @@
-#!/usr/bin/python3
 import sys
-import random
 from time import time
 from copy import copy, deepcopy
 import random
+from multiprocessing import Process, Queue
+from queue import Empty
 
 
 class Literal:
@@ -210,6 +210,10 @@ def solve(vars, clauseSet, assignment):
     return solve(vars, clauseSet, assignment)
 
 
+def runSolver(conn, vars, clauseSet):
+    assignment = solve(vars, clauseSet, {})
+    conn.put(assignment)
+
 def readInput(cnfFile):
     variableSet = []
     clauseSet = []
@@ -247,9 +251,23 @@ if __name__ == "__main__":
     inputFile = sys.argv[1]
     varSet, clauseSet = readInput(inputFile)
 
-    # assignment will be None if unsat
+    queueConn = Queue()
+    solverProcess = Process(target=runSolver, args=(queueConn, varSet, clauseSet))
+
     startTime = time()
-    assignment = solve(varSet, clauseSet, {})
+
+    # do a restart every 60 seconds
+    solverProcess.start()
+    while True:
+        try:
+            assignment = queueConn.get(block=True, timeout=60)
+            break
+        except Empty:
+            # kill solver and restart
+            solverProcess.terminate()
+            solverProcess = Process(target=runSolver, args=(queueConn, varSet, clauseSet))
+            solverProcess.start()
+
     runtime = time() - startTime
 
     printOutput(inputFile, assignment, runtime)
