@@ -36,8 +36,22 @@ class Clause:
 
 def rmoms(var, clauseSet):
     # implementation of randomized MOMS (max occurances of min size)
-    ...
-    return 0, True
+    smallClauseSize = 20
+    k = 1.5
+
+    negOcc = 0
+    posOcc = 0
+
+    posLit = Literal(var, True)
+    negLit = Literal(var, False)
+
+    for clause in clauseSet:
+        if posLit in clause:
+            posOcc += 1
+        if negLit in clause:
+            negOcc += 1
+
+    return (posOcc + negOcc) * (2 ** k) + (posOcc * negOcc), posOcc > negOcc
 
 
 def jerWang(var, clauseSet):
@@ -177,7 +191,7 @@ def solve(vars, clauseSet, assignment):
         return assignment
 
     # decide which variable to split on
-    var, sign = chooseVariableSplit(vars, clauseSet, rdlis)
+    var, sign = chooseVariableSplit(vars, clauseSet, jerWang)
 
     # try solving down the first branch
     fVars = deepcopy(vars)
