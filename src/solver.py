@@ -216,7 +216,7 @@ def runSolver(conn, vars, clauseSet):
 def verifySolution(assignment, clauseSet):
     for clause in clauseSet:
         clauseSatisfied = False
-        for lit in clauseSet.literalSet:
+        for lit in clause.literalSet:
             # this literal satisfied the clause
             if assignment[lit.name] == lit.sign:
                 clauseSatisfied = True
@@ -266,6 +266,7 @@ def printOutput(file, assignment, runTime):
 if __name__ == "__main__":
     inputFile = sys.argv[1]
     varSet, clauseSet = readInput(inputFile)
+    verifClauseSet = deepcopy(clauseSet)
 
     queueConn = Queue()
     solverProcess = Process(target=runSolver, args=(queueConn, varSet, clauseSet))
@@ -287,3 +288,5 @@ if __name__ == "__main__":
     runtime = time() - startTime
 
     printOutput(inputFile, assignment, runtime)
+    if assignment is not None:
+        print(f"Verifying solution: {verifySolution(assignment, verifClauseSet)}")
