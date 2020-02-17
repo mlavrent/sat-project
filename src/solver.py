@@ -24,14 +24,17 @@ class Literal:
 
 
 class Clause:
-    def __init__(self, literalSet):
-       self.literalSet = literalSet  # set(literal)
+    def __init__(self, id, literalSet):
+        self.id = id
+        self.literalSet = literalSet
 
     def __repr__(self):
-        return str(self.literalSet)
+        return f"{self.id}: {str(self.literalSet)}"
 
     def __eq__(self, other):
-        return self.literalSet == other.literalSet
+        if type(other) != Clause:
+            return False
+        return self.id == other.id
 
 
 def rmoms(var, clauseSet):
@@ -121,7 +124,11 @@ def unitClauseElim(vars, clauseSet, assignment):
                 unitLitInv = Literal(unitLit.name, not unitLit.sign)
 
                 assignment[unitLit.name] = unitLit.sign
-                vars.remove(unitLit)
+                # this var might've already been removed - skip it
+                if unitLit.name in vars:
+                    vars.remove(unitLit.name)
+                else:
+                    continue
                 changed = True
 
                 for otherClause in copy(clauseSet):
@@ -169,7 +176,9 @@ def assignVariable(var, sign, vars, clauseSet, assignment):
     for clause in copy(clauseSet):
         for lit in copy(clause.literalSet):
             if lit.name == var and lit.sign == sign:
+                # remove this clause and stop checking this clause's literals
                 clauseSet.remove(clause)
+                break
             elif lit.name == var and lit.sign != sign:
                 clause.literalSet.remove(lit)
     
@@ -181,7 +190,7 @@ def solve(vars, clauseSet, assignment):
     assignment = unitClauseElim(vars, clauseSet, assignment)
     assignment = sameSignElim(vars, clauseSet, assignment)
 
-    if Clause([]) in clauseSet:
+    if any(c.literalSet == [] for c in clauseSet):
         # if there's an empty clause, it's UNSAT
         return None
     elif not clauseSet:
@@ -239,6 +248,7 @@ def verifySolution(assignment, clauseSet):
 def readInput(cnfFile):
     variableSet = []
     clauseSet = []
+    nextCID = 0
     with open(cnfFile, "r") as f:
         for line in f.readlines():
             tokens = line.strip().split()
@@ -252,7 +262,8 @@ def readInput(cnfFile):
                     if variable not in variableSet:
                         variableSet.append(variable)
 
-                clauseSet.append(Clause(literalSet))
+                clauseSet.append(Clause(nextCID, literalSet))
+                nextCID += 1
     
     return variableSet, clauseSet
 
@@ -283,10 +294,11 @@ if __name__ == "__main__":
     solverProcess.start()
     while True:
         try:
-            assignment = queueConn.get(block=True, timeout=60)
+            assignment = queueConn.get(block=True, timeout=None)
             break
         except Empty:
             # kill solver and restart
+            print("Restarting solver")
             solverProcess.terminate()
             solverProcess = Process(target=runSolver, args=(queueConn, varSet, clauseSet))
             solverProcess.start()
