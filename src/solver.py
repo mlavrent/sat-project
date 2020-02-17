@@ -222,7 +222,6 @@ def solve(vars, clauseSet, assignment):
 
 def runSolver(conn, vars, clauseSet):
     assignment = solve(copy(vars), clauseSet, {})
-    print(assignment)
     # assign any variable not already assigned to true (if SAT)
     if assignment is not None:
         for v in vars:
@@ -304,8 +303,8 @@ if __name__ == "__main__":
             break
         except Empty:
             # kill solver and restart
-            print("Restarting solver")
             timeout *= timeoutMult
+            print(f"Restarting solver with timeout {timeout:.2f}s")
 
             solverProcess.terminate()
             solverProcess = Process(target=runSolver, args=(queueConn, varSet, clauseSet))
@@ -313,6 +312,6 @@ if __name__ == "__main__":
 
     runtime = time() - startTime
 
-    printOutput(inputFile, assignment, runtime)
     if assignment is not None:
         print(f"Verifying solution: {verifySolution(assignment, verifClauseSet)}")
+    printOutput(inputFile, assignment, runtime)
