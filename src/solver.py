@@ -294,15 +294,19 @@ if __name__ == "__main__":
 
     startTime = time()
 
-    # do a restart every 60 seconds
+    # do a restart, with growing time increments
+    timeout = 5
+    timeoutMult = 1.5
     solverProcess.start()
     while True:
         try:
-            assignment = queueConn.get(block=True, timeout=None)
+            assignment = queueConn.get(block=True, timeout=timeout)
             break
         except Empty:
             # kill solver and restart
             print("Restarting solver")
+            timeout *= timeoutMult
+
             solverProcess.terminate()
             solverProcess = Process(target=runSolver, args=(queueConn, varSet, clauseSet))
             solverProcess.start()
