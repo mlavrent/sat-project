@@ -114,59 +114,58 @@ def chooseVariableSplit(vars, clauseSet, heuristic):
 
 
 def unitClauseElim(vars, clauseSet, assignment):
-    changed = True
-    while changed:
-        changed = False
+    changed = False
 
-        for clause in copy(clauseSet):
-            if len(clause.literalSet) == 1:
-                unitLit = clause.literalSet[0]
-                unitLitInv = Literal(unitLit.name, not unitLit.sign)
+    for clause in copy(clauseSet):
+        if len(clause.literalSet) == 1:
+            unitLit = clause.literalSet[0]
+            unitLitInv = Literal(unitLit.name, not unitLit.sign)
 
-                assignment[unitLit.name] = unitLit.sign
-                # this var might've already been removed - skip it
-                if unitLit.name in vars:
-                    vars.remove(unitLit.name)
-                else:
-                    continue
-                changed = True
+            assignment[unitLit.name] = unitLit.sign
+            # this var might've already been removed - skip it
+            if unitLit.name in vars:
+                vars.remove(unitLit.name)
+            else:
+                continue
+            changed = True
 
-                for otherClause in copy(clauseSet):
-                    # remove everywhere inverse shows up
-                    for otherLit in copy(otherClause.literalSet):
-                        if otherLit == unitLitInv:
-                            otherClause.literalSet.remove(otherLit)
+            for otherClause in copy(clauseSet):
+                # remove everywhere inverse shows up
+                for otherLit in copy(otherClause.literalSet):
+                    if otherLit == unitLitInv:
+                        otherClause.literalSet.remove(otherLit)
 
-                    # remove clauses containing the normal literal
-                    if len(otherClause.literalSet) > 1 and unitLit in otherClause.literalSet:
-                        clauseSet.remove(otherClause)
+                # remove clauses containing the normal literal
+                if len(otherClause.literalSet) > 1 and unitLit in otherClause.literalSet:
+                    clauseSet.remove(otherClause)
     
-    return assignment
+    return assignment, changed
 
 
 def sameSignElim(vars, clauseSet, assignment):
-    changed = True
-    while changed:
-        changed = False
+    changed = False
 
-        # get all literals
-        allLiterals = set()
-        for clause in clauseSet:
-            for lit in clause.literalSet:
-                allLiterals.add(lit)
+    # get all literals
+    allLiterals = set()
+    for clause in clauseSet:
+        for lit in clause.literalSet:
+            allLiterals.add(lit)
 
-        # find pure literals, remove them, and add to assignment
-        for lit in copy(allLiterals):
-            oppLit = Literal(lit.name, not lit.sign)
-            if oppLit not in allLiterals:
-                assignment[lit.name] = lit.sign
-                changed = True
+    # find pure literals, remove them, and add to assignment
+    for lit in copy(allLiterals):
+        oppLit = Literal(lit.name, not lit.sign)
+        if oppLit not in allLiterals:
+            assignment[lit.name] = lit.sign
+            if lit.name in vars:
+                vars.remove(lit.name)
+            changed = True
 
-                # remove all clauses containing that literal
-                for clause in copy(clauseSet):
+            # remove all clauses containing that literal
+            for clause in copy(clauseSet):
+                if lit in clause.literalSet:
                     clauseSet.remove(clause)
-    
-    return assignment
+
+    return assignment, changed
 
 
 def assignVariable(var, sign, vars, clauseSet, assignment):
@@ -186,9 +185,13 @@ def assignVariable(var, sign, vars, clauseSet, assignment):
 
 
 def solve(vars, clauseSet, assignment):
-    # do inference with unit clause and same sign elim
-    assignment = unitClauseElim(vars, clauseSet, assignment)
-    assignment = sameSignElim(vars, clauseSet, assignment)
+    # do inference with unit clause and same sign elim until we can't anymore
+    changed = True
+    while changed:
+        assignment, uceChange = unitClauseElim(vars, clauseSet, assignment)
+        assignment, sseChange = sameSignElim(vars, clauseSet, assignment)
+        changed = uceChange or sseChange
+
 
     if any(c.literalSet == [] for c in clauseSet):
         # if there's an empty clause, it's UNSAT
@@ -219,11 +222,12 @@ def solve(vars, clauseSet, assignment):
 
 def runSolver(conn, vars, clauseSet):
     assignment = solve(copy(vars), clauseSet, {})
-
-    # Assign any variable not already assigned to true
-    for v in vars:
-        if v not in assignment:
-            assignment[v] = True
+    print(assignment)
+    # assign any variable not already assigned to true (if SAT)
+    if assignment is not None:
+        for v in vars:
+            if v not in assignment:
+                assignment[v] = True
 
     conn.put(assignment)
 
