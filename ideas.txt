@@ -9,11 +9,12 @@
 -------------------
 2/12
  - fix output to assign unnecessary vars too (just do #t for all)
- - redo UCE to recursively do it for new UCs that open up (still mult at a time)
- - better heuristic (small clauses)
+Mark: - redo UCE to recursively do it for new UCs that open up (still mult at a time)
+Mark: - better heuristic (small clauses)
  - look for stupid map/filters
     - run profiler see what takes up time
  - watched literals
  - run test cases through minisat to get ground truth
+Neev: - fix solution checker
 
 Due Fri 2/21
