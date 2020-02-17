@@ -34,16 +34,23 @@ class Clause:
         return self.literalSet == other.literalSet
 
 
-def rmoms(vars, clauseSet):
+def rmoms(var, clauseSet):
     # implementation of randomized MOMS (max occurances of min size)
     ...
-    return "x", True
+    return 0, True
 
 
-def jerWang(vars, clauseSet):
+def jerWang(var, clauseSet):
     # implementation of Jeroslow-Wang
-    ...
-    return "x", True
+    posScore = 0
+    negScore = 0
+    for clause in clauseSet:
+        if Literal(var, True) in clause.literalSet:
+            posScore += 2 ** (-len(clause.literalSet))
+        if Literal(var, False) in clause.literalSet:
+            negScore += 2 ** (-len(clause.literalSet))
+
+    return max(posScore, negScore), posScore > negScore
 
 
 def rdlis(var, clauseSet):
@@ -60,7 +67,8 @@ def rdlis(var, clauseSet):
         if negLit in clause:
             negOcc += 1
 
-    return max(posOcc, negOcc)
+    return max(posOcc, negOcc), posOcc > negOcc
+
 
 def chooseVariableSplit(vars, clauseSet, heuristic):
     # dictionary of our top candidates of form {var: (score, sign)}
