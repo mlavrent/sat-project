@@ -16,4 +16,4 @@ input=$1
 #./bin/solver $input
 
 # Python
-python3 src/solver.py
+python3 src/solver.py $input
