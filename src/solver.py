@@ -294,8 +294,8 @@ if __name__ == "__main__":
     startTime = time()
 
     # do a restart, with growing time increments
-    timeout = 5
-    timeoutMult = 1.5
+    timeout = 20
+    timeoutMult = 2
     solverProcess.start()
     while True:
         try:
