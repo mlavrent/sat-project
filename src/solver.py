@@ -62,7 +62,7 @@ class Clause:
             return
 
     def __repr__(self):
-        return f"{self.id}: {str(self.literalSet)}"
+        return "{}: {}".format(self.id, self.literalSet)
 
     def __eq__(self, other):
         if type(other) != Clause:
@@ -316,7 +316,7 @@ def printOutput(file, assignment, runTime):
     else:
         result = "UNSAT"
 
-    print(f"Instance: {file} Time: {runTime:.2f} Result: {result}")
+    print("Instance: {} Time: {:.2f} Result: {}".format(file, runTime, result))
 
 
 if __name__ == "__main__":
@@ -340,7 +340,7 @@ if __name__ == "__main__":
         except Empty:
             # kill solver and restart
             timeout *= timeoutMult
-            print(f"Restarting solver with timeout {timeout:.2f}s")
+            print("Restarting solver with timeout {:.2f}s".format(timeout))
 
             solverProcess.terminate()
             solverProcess = Process(target=runSolver, args=(queueConn, varSet, clauseSet))
@@ -349,5 +349,5 @@ if __name__ == "__main__":
     runtime = time() - startTime
 
     if assignment is not None:
-        print(f"Verifying solution: {verifySolution(assignment, verifClauseSet)}")
+        print("Verifying solution: {}".format(verifySolution(assignment, verfClauseSet)))
     printOutput(inputFile, assignment, runtime)
