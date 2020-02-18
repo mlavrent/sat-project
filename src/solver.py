@@ -28,6 +28,39 @@ class Clause:
         self.id = id
         self.literalSet = literalSet
 
+        # indices of the watched literals in literalSet
+        self.watchIdx = [0, 1]
+        self.numLits = len(literalSet)
+    
+    def removeLit(self, lit, vars, clauseSet, assignment):
+        watchLit0 = self.literalSet[self.watchIdx[0]]
+        watchLit1 = self.literalSet[self.watchIdx[1]]
+
+        self.literalSet.remove(lit)
+        self.numLits -= 1
+
+        if lit == watchLit0:
+            # choose another watched literal
+            if self.numLits >= 2:
+                self.watchIdx[0] = 1
+            else:
+                # if we can't, unit propogate the other literal immediately
+                propogateUnit(watchLit1, vars, clauseSet, assignment)
+                
+        elif lit == watchLit1:
+            # choose another watched literal
+            if self.numLits >= 2:
+                self.watchIdx[1] = 1
+            else:
+                # if we can't, unit propogate the other literal immediately
+                propogateUnit(watchLit0, vars, clauseSet, assignment)
+
+    def removeFromSet(self, clauseSet):
+        try:
+            clauseSet.remove(self)
+        except ValueError:
+            return
+
     def __repr__(self):
         return f"{self.id}: {str(self.literalSet)}"
 
@@ -49,9 +82,9 @@ def rmoms(var, clauseSet):
     negLit = Literal(var, False)
 
     for clause in clauseSet:
-        if posLit in clause:
+        if posLit in clause.literalSet:
             posOcc += 1
-        if negLit in clause:
+        if negLit in clause.literalSet:
             negOcc += 1
 
     return (posOcc + negOcc) * (2 ** k) + (posOcc * negOcc), posOcc > negOcc
@@ -63,9 +96,9 @@ def jerWang(var, clauseSet):
     negScore = 0
     for clause in clauseSet:
         if Literal(var, True) in clause.literalSet:
-            posScore += 2 ** (-len(clause.literalSet))
+            posScore += 2 ** (-clause.numLits)
         if Literal(var, False) in clause.literalSet:
-            negScore += 2 ** (-len(clause.literalSet))
+            negScore += 2 ** (-clause.numLits)
 
     return max(posScore, negScore), posScore > negScore
 
@@ -79,9 +112,9 @@ def rdlis(var, clauseSet):
     negLit = Literal(var, False)
 
     for clause in clauseSet:
-        if posLit in clause:
+        if posLit in clause.literalSet:
             posOcc += 1
-        if negLit in clause:
+        if negLit in clause.literalSet:
             negOcc += 1
 
     return max(posOcc, negOcc), posOcc > negOcc
@@ -113,31 +146,34 @@ def chooseVariableSplit(vars, clauseSet, heuristic):
     return var, scoreSign[1]
 
 
+def propogateUnit(unitLit, vars, clauseSet, assignment):
+    unitLitInv = Literal(unitLit.name, not unitLit.sign)
+
+    assignment[unitLit.name] = unitLit.sign
+    # this var might've already been removed - skip it
+    try:
+        vars.remove(unitLit.name)
+    except ValueError:
+        return
+
+    for otherClause in copy(clauseSet):
+        # remove everywhere inverse shows up
+        for otherLit in copy(otherClause.literalSet):
+            if otherLit == unitLitInv:
+                otherClause.removeLit(otherLit, vars, clauseSet, assignment)
+
+        # remove clauses containing the normal literal
+        if otherClause.numLits > 1 and unitLit in otherClause.literalSet:
+            otherClause.removeFromSet(clauseSet)
+    
+
 def unitClauseElim(vars, clauseSet, assignment):
     changed = False
 
     for clause in copy(clauseSet):
-        if len(clause.literalSet) == 1:
-            unitLit = clause.literalSet[0]
-            unitLitInv = Literal(unitLit.name, not unitLit.sign)
-
-            assignment[unitLit.name] = unitLit.sign
-            # this var might've already been removed - skip it
-            if unitLit.name in vars:
-                vars.remove(unitLit.name)
-            else:
-                continue
+        if clause.numLits == 1:
             changed = True
-
-            for otherClause in copy(clauseSet):
-                # remove everywhere inverse shows up
-                for otherLit in copy(otherClause.literalSet):
-                    if otherLit == unitLitInv:
-                        otherClause.literalSet.remove(otherLit)
-
-                # remove clauses containing the normal literal
-                if len(otherClause.literalSet) > 1 and unitLit in otherClause.literalSet:
-                    clauseSet.remove(otherClause)
+            propogateUnit(clause.literalSet[0], vars, clauseSet, assignment) 
     
     return assignment, changed
 
@@ -163,7 +199,7 @@ def sameSignElim(vars, clauseSet, assignment):
             # remove all clauses containing that literal
             for clause in copy(clauseSet):
                 if lit in clause.literalSet:
-                    clauseSet.remove(clause)
+                    clause.removeFromSet(clauseSet)
 
     return assignment, changed
 
@@ -176,10 +212,10 @@ def assignVariable(var, sign, vars, clauseSet, assignment):
         for lit in copy(clause.literalSet):
             if lit.name == var and lit.sign == sign:
                 # remove this clause and stop checking this clause's literals
-                clauseSet.remove(clause)
+                clause.removeFromSet(clauseSet)
                 break
             elif lit.name == var and lit.sign != sign:
-                clause.literalSet.remove(lit)
+                clause.removeLit(lit, vars, clauseSet, assignment)
     
     return clauseSet, assignment
 
@@ -201,7 +237,7 @@ def solve(vars, clauseSet, assignment):
         return assignment
 
     # decide which variable to split on
-    var, sign = chooseVariableSplit(vars, clauseSet, jerWang)
+    var, sign = chooseVariableSplit(vars, clauseSet, rmoms)
 
     # try solving down the first branch
     fVars = deepcopy(vars)
@@ -294,8 +330,8 @@ if __name__ == "__main__":
     startTime = time()
 
     # do a restart, with growing time increments
-    timeout = 5
-    timeoutMult = 1.5
+    timeout = 30
+    timeoutMult = 2
     solverProcess.start()
     while True:
         try:
