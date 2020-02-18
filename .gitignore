@@ -9,3 +9,4 @@ bin/
 
 .idea/
 src/__pycache__/
+*.log
