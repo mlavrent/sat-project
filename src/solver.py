@@ -310,7 +310,7 @@ def solve(varbs, clauseSet, assignment):
 
 
 def runSolver(conn, varbs, clauseSet):
-    assignment = solve(deepcopy(varbs), clauseSet, Assignment({}))
+    assignment = solve(deepcopy(varbs), deepcopy(clauseSet), Assignment({}))
     # assign any variable not already assigned to true (if SAT)
     if assignment is not None:
         for v in varbs.baseSet:
@@ -378,14 +378,16 @@ if __name__ == "__main__":
     verifClauseSet = deepcopy(clauseSet)
 
     queueConn = Queue()
-    solverProcess = Process(target=runSolver, args=(queueConn, varbset, clauseSet))
+    numProcs = 4
+    solvers = [Process(target=runSolver, args=(queueConn, varbset, clauseSet)) for _ in range(numProcs)]
 
     startTime = time()
 
     # do a restart, with growing time increments
     timeout = 30
     timeoutMult = 2
-    solverProcess.start()
+    for solverProc in solvers:
+        solverProc.start()
     while True:
         try:
             assignment = queueConn.get(block=True, timeout=timeout)
@@ -395,9 +397,11 @@ if __name__ == "__main__":
             timeout *= timeoutMult
             print(f"Restarting solver with timeout {timeout:.2f}s")
 
-            solverProcess.terminate()
-            solverProcess = Process(target=runSolver, args=(queueConn, varbset, clauseSet))
-            solverProcess.start()
+            for solverProc in solvers:
+                solverProc.terminate()
+            solvers = [Process(target=runSolver, args=(queueConn, varbset, clauseSet)) for _ in range(numProcs)]
+            for solverProc in solvers:
+                solverProc.start()
 
     runtime = time() - startTime
 
