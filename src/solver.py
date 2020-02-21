@@ -398,10 +398,13 @@ if __name__ == "__main__":
             print(f"Restarting solver with timeout {timeout:.2f}s")
 
             for solverProc in solvers:
-                solverProc.terminate()
+                solverProc.kill()
             solvers = [Process(target=runSolver, args=(queueConn, varbset, clauseSet)) for _ in range(numProcs)]
             for solverProc in solvers:
                 solverProc.start()
+
+    for solverProc in solvers:
+        solverProc.kill()
 
     runtime = time() - startTime
 
