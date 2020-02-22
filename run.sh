@@ -16,4 +16,5 @@ input=$1
 #./bin/solver $input
 
 # Python
-pypy3.6-v7.1.1 src/solver.py $input
+#pypy3.6-v7.1.1 src/solver.py $input
+./pypy3.6-v7.3.0-linux64/bin/pypy3 src/solver.py $input
