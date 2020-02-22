@@ -273,7 +273,7 @@ def solve(varbs, clauseSet, assignment):
     del origAssn
 
     # decide which variable to split on
-    var, sign = chooseVariableSplit(varbs, clauseSet, None)
+    var, sign = chooseVariableSplit(varbs, clauseSet, jerWang)
 
     fClauseSet = deepcopy(clauseSet)
 
@@ -378,7 +378,7 @@ if __name__ == "__main__":
     verifClauseSet = deepcopy(clauseSet)
 
     queueConn = Queue()
-    numProcs = 4
+    numProcs = 7
     solvers = [Process(target=runSolver, args=(queueConn, varbset, clauseSet)) for _ in range(numProcs)]
 
     startTime = time()
