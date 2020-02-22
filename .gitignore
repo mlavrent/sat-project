@@ -11,4 +11,4 @@ bin/
 src/__pycache__/
 *.log
 
-results.log
+pypy3.6-v7.3.0-linux64/
